@@ -1,4 +1,1 @@
-import { Controller } from '@nestjs/common';
-
-@Controller('messages')
-export class MessagesController {}
+export { MessagesController } from './controllers/messages.controller';

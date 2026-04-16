@@ -2,6 +2,7 @@ import { Alert, Button, Empty, Flex, Spin } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { ConversationItem } from "../../types/chat";
 import { ConversationList } from "./ConversationList";
+import styles from "./ConversationSidebar.module.css";
 
 interface ConversationSidebarProps {
   conversations: ConversationItem[];
@@ -25,7 +26,7 @@ export function ConversationSidebar({
   onCreate,
 }: ConversationSidebarProps) {
   return (
-    <Flex vertical gap={12}>
+    <Flex vertical gap={12} className={styles.root}>
       <Button
         type="primary"
         icon={<PlusOutlined />}
@@ -40,11 +41,15 @@ export function ConversationSidebar({
       {isError ? <Alert type="error" showIcon message={errorMessage} /> : null}
 
       {!isLoading && !isError && conversations.length === 0 ? (
-        <Empty description="暂无会话，点击上方按钮新建" />
+        <div className={styles.listScroll}>
+          <Empty description="暂无会话，点击上方按钮新建" />
+        </div>
       ) : null}
 
       {!isLoading && !isError && conversations.length > 0 ? (
-        <ConversationList items={conversations} activeId={activeId} onSelect={onSelect} />
+        <div className={styles.listScroll}>
+          <ConversationList items={conversations} activeId={activeId} onSelect={onSelect} />
+        </div>
       ) : null}
     </Flex>
   );

@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 60vh;
+  overflow-y: auto;
 }
 
 .row {
@@ -50,6 +52,27 @@
 .paragraph {
   margin-bottom: 0 !important;
   white-space: pre-wrap;
+}
+
+.contentWrap {
+  overflow: hidden;
+}
+
+.contentCollapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+}
+
+.contentExpanded {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.expandToggle {
+  margin-top: 6px;
+  padding: 0;
 }
 
 .emptyWrap {

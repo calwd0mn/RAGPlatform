@@ -3,8 +3,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { ConversationsService } from '../../conversations/services/conversations.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { MessageResponse } from '../interfaces/message-response.interface';
@@ -15,50 +15,37 @@ export class MessagesService {
   constructor(
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
-    @InjectConnection()
-    private readonly connection: Connection,
     private readonly conversationsService: ConversationsService,
   ) {}
 
   async create(userId: string, dto: CreateMessageDto): Promise<MessageResponse> {
-    const session = await this.connection.startSession();
-    let savedMessage: MessageDocument | null = null;
+    await this.conversationsService.ensureOwnedConversation(
+      userId,
+      dto.conversationId,
+    );
 
-    try {
-      await session.withTransaction(async (): Promise<void> => {
-        await this.conversationsService.ensureOwnedConversation(
-          userId,
-          dto.conversationId,
-          session,
-        );
+    const normalizedUserId = this.toObjectId(userId);
+    const normalizedConversationId = this.toObjectId(dto.conversationId);
 
-        const normalizedUserId = this.toObjectId(userId);
-        const normalizedConversationId = this.toObjectId(dto.conversationId);
+    const createdMessage = new this.messageModel({
+      userId: normalizedUserId,
+      conversationId: normalizedConversationId,
+      role: dto.role,
+      content: dto.content.trim(),
+      citations: [],
+    });
 
-        const createdMessage = new this.messageModel({
-          userId: normalizedUserId,
-          conversationId: normalizedConversationId,
-          role: dto.role,
-          content: dto.content.trim(),
-          citations: [],
-        });
-
-        savedMessage = await createdMessage.save({ session });
-
-        await this.conversationsService.touchLastMessageAt(
-          userId,
-          dto.conversationId,
-          savedMessage.createdAt,
-          session,
-        );
-      });
-    } finally {
-      await session.endSession();
-    }
+    const savedMessage = await createdMessage.save();
 
     if (!savedMessage) {
       throw new InternalServerErrorException('Failed to create message');
     }
+
+    await this.conversationsService.touchLastMessageAt(
+      userId,
+      dto.conversationId,
+      savedMessage.createdAt,
+    );
 
     return this.toResponse(savedMessage);
   }

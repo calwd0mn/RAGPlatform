@@ -1,0 +1,55 @@
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { AuthUser } from '../../auth/interfaces/auth-user.interface';
+import { DOCUMENT_MULTER_OPTIONS } from '../utils/document-file.util';
+import { DocumentIdParamDto } from '../dto/document-id-param.dto';
+import { DocumentResponse } from '../interfaces/document-response.interface';
+import { UploadedDocumentFile } from '../interfaces/uploaded-document-file.interface';
+import { DocumentsService } from '../services/documents.service';
+
+@UseGuards(JwtAuthGuard)
+@Controller('documents')
+export class DocumentsController {
+  constructor(private readonly documentsService: DocumentsService) {}
+
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file', DOCUMENT_MULTER_OPTIONS))
+  upload(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: UploadedDocumentFile | undefined,
+  ): Promise<DocumentResponse> {
+    return this.documentsService.createFromUpload(user.id, file);
+  }
+
+  @Get()
+  findAll(@CurrentUser() user: AuthUser): Promise<DocumentResponse[]> {
+    return this.documentsService.findAllByUser(user.id);
+  }
+
+  @Get(':id')
+  findOne(
+    @CurrentUser() user: AuthUser,
+    @Param() params: DocumentIdParamDto,
+  ): Promise<DocumentResponse> {
+    return this.documentsService.findOneByUser(user.id, params.id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@CurrentUser() user: AuthUser, @Param() params: DocumentIdParamDto): Promise<void> {
+    return this.documentsService.remove(user.id, params.id);
+  }
+}

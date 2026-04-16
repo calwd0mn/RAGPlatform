@@ -1,4 +1,1 @@
-import { Injectable } from '@nestjs/common';
-
-@Injectable()
-export class DocumentsService {}
+export { DocumentsService } from './services/documents.service';

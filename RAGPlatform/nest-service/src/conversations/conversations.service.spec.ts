@@ -29,10 +29,15 @@ function createConversationDoc(input?: {
   };
 }
 
-function createExecQuery<T>(value: T): { exec: () => Promise<T> } {
-  return {
+function createExecQuery<T>(value: T): {
+  session: (_value: object | null) => { exec: () => Promise<T> };
+  exec: () => Promise<T>;
+} {
+  const query = {
+    session: (_value: object | null): { exec: () => Promise<T> } => query,
     exec: async (): Promise<T> => value,
   };
+  return query;
 }
 
 describe('ConversationsService', () => {

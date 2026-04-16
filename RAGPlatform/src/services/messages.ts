@@ -1,11 +1,14 @@
 import { http } from "./http";
 import type { ChatMessage } from "../types/chat";
+import type { RagCitation, RagTrace } from "../types/rag";
 
 interface MessageResponse {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   createdAt: string;
+  citations?: RagCitation[];
+  trace?: RagTrace;
 }
 
 export interface SendMessagePayload {
@@ -27,6 +30,8 @@ function toChatMessage(response: MessageResponse): ChatMessage {
     role: response.role === "assistant" ? "assistant" : "user",
     content: response.content,
     createdAt: formatTimeLabel(response.createdAt),
+    citations: response.citations,
+    trace: response.trace,
   };
 }
 

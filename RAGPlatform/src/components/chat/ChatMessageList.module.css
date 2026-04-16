@@ -36,6 +36,11 @@
   border-color: #d9d9d9;
 }
 
+.assistantSelected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.28);
+}
+
 .userBubble {
   background: #e6f7ff;
   border-color: #91d5ff;
@@ -73,6 +78,27 @@
 .expandToggle {
   margin-top: 6px;
   padding: 0;
+}
+
+.actions {
+  margin-top: 8px;
+}
+
+.actionLink {
+  font-size: 12px;
+}
+
+.citationTags {
+  margin-top: 8px;
+}
+
+.citationTag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.citationTagSelected {
+  font-weight: 600;
 }
 
 .emptyWrap {

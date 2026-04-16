@@ -1,4 +1,13 @@
-export type DocumentStatus = "queued" | "processing" | "ready" | "failed";
+export type DocumentStatus =
+  | "uploaded"
+  | "parsing"
+  | "parsed"
+  | "chunked"
+  | "embedded"
+  | "ready"
+  | "failed"
+  | "queued"
+  | "processing";
 
 export interface DocumentRecord {
   id: string;

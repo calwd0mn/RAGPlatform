@@ -1,3 +1,15 @@
+.wrapper {
+  width: 100%;
+}
+
 .dragger {
   padding: 8px;
+}
+
+.buttonWrap {
+  margin-top: 8px;
+}
+
+.actionBar {
+  width: 100%;
 }

@@ -1,29 +1,38 @@
-import { List, Space, Tag, Typography } from "antd";
-import type { TraceItem } from "../../types/chat";
+import { Alert, Descriptions, Empty, Space } from "antd";
+import type { ChatMessage } from "../../types/chat";
 import styles from "./TracePanel.module.css";
 
 interface TracePanelProps {
-  items: TraceItem[];
+  message?: ChatMessage;
 }
 
-export function TracePanel({ items }: TracePanelProps) {
+export function TracePanel({ message }: TracePanelProps) {
+  if (!message) {
+    return <Empty description="当前会话还没有 assistant 回答" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  }
+
+  const trace = message.trace;
+  if (!trace) {
+    return <Empty description="该回答没有 trace 数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  }
+
   return (
-    <List
-      size="small"
-      dataSource={items}
-      renderItem={(item) => (
-        <List.Item>
-          <Space direction="vertical" size={4}>
-            <Space size={8}>
-              <Typography.Text strong className={styles.stepText}>
-                {item.step}
-              </Typography.Text>
-              <Tag>{item.elapsedMs}ms</Tag>
-            </Space>
-            <Typography.Text type="secondary">{item.detail}</Typography.Text>
-          </Space>
-        </List.Item>
-      )}
-    />
+    <Space direction="vertical" size={12} className={styles.panelStack}>
+      {trace.retrievedCount === 0 ? (
+        <Alert type="warning" showIcon title="retrievedCount = 0，本轮没有召回到文档。" />
+      ) : null}
+
+      <Descriptions size="small" column={1} className={styles.summary}>
+        <Descriptions.Item label="Query">{trace.query ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Rewritten">{trace.rewrittenQuery ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Top K">{trace.topK ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Retrieved">{trace.retrievedCount ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Model">{trace.model ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Provider">{trace.retrievalProvider ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label="Latency">
+          {typeof trace.latencyMs === "number" ? `${trace.latencyMs} ms` : "-"}
+        </Descriptions.Item>
+      </Descriptions>
+    </Space>
   );
 }

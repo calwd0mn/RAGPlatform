@@ -38,7 +38,7 @@ export function ConversationSidebar({
 
       {isLoading ? <Spin tip="会话加载中..." /> : null}
 
-      {isError ? <Alert type="error" showIcon message={errorMessage} /> : null}
+      {isError ? <Alert type="error" showIcon title={errorMessage} /> : null}
 
       {!isLoading && !isError && conversations.length === 0 ? (
         <div className={styles.listScroll}>

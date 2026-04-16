@@ -16,7 +16,7 @@ export function CitationPanel({ items }: CitationPanelProps) {
           <List.Item.Meta
             title={
               <Typography.Text strong className={styles.titleText}>
-                {item.sourceName}
+                {item.documentName?.trim() || "未命名文档"}
               </Typography.Text>
             }
             description={
@@ -26,9 +26,11 @@ export function CitationPanel({ items }: CitationPanelProps) {
                   type="secondary"
                   className={styles.excerpt}
                 >
-                  {item.excerpt}
+                  {item.content?.trim() || "该证据未返回可展示摘录。"}
                 </Typography.Paragraph>
-                <Tag color="cyan">匹配度 {Math.round(item.score * 100)}%</Tag>
+                {typeof item.score === "number" ? (
+                  <Tag color="cyan">匹配度 {Math.round(item.score * 100)}%</Tag>
+                ) : null}
               </>
             }
           />

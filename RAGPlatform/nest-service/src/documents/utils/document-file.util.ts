@@ -16,6 +16,31 @@ function normalizePath(pathValue: string): string {
   return pathValue.replace(/\\/g, '/');
 }
 
+function containsCjk(value: string): boolean {
+  return /[\u3400-\u9fff]/.test(value);
+}
+
+export function normalizeUploadedOriginalName(originalName: string): string {
+  if (!originalName) {
+    return originalName;
+  }
+
+  if (containsCjk(originalName)) {
+    return originalName;
+  }
+
+  const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
+  if (decoded.includes('�')) {
+    return originalName;
+  }
+
+  if (containsCjk(decoded)) {
+    return decoded;
+  }
+
+  return originalName;
+}
+
 export function getDocumentExtension(filename: string): string {
   return extname(filename).toLowerCase();
 }
@@ -51,7 +76,8 @@ export const DOCUMENT_MULTER_OPTIONS: MulterOptions = {
       callback(null, DOCUMENT_UPLOAD_DIR);
     },
     filename: (_request, file: UploadedDocumentFile, callback): void => {
-      const fileExtension = getDocumentExtension(file.originalname);
+      const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+      const fileExtension = getDocumentExtension(normalizedOriginalName);
       callback(null, `${randomUUID()}${fileExtension}`);
     },
   }),
@@ -59,7 +85,8 @@ export const DOCUMENT_MULTER_OPTIONS: MulterOptions = {
     fileSize: DOCUMENT_MAX_FILE_SIZE,
   },
   fileFilter: (_request, file: UploadedDocumentFile, callback: FileFilterCallback): void => {
-    if (!isAllowedDocumentFileType(file.mimetype, file.originalname)) {
+    const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+    if (!isAllowedDocumentFileType(file.mimetype, normalizedOriginalName)) {
       callback(new BadRequestException('Invalid file type'));
       return;
     }

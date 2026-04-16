@@ -1,3 +1,5 @@
+import type { RagCitation, RagTrace } from "./rag";
+
 export interface ConversationItem {
   id: string;
   title: string;
@@ -9,18 +11,8 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  citations?: RagCitation[];
+  trace?: RagTrace;
 }
 
-export interface CitationItem {
-  id: string;
-  sourceName: string;
-  excerpt: string;
-  score: number;
-}
-
-export interface TraceItem {
-  id: string;
-  step: string;
-  detail: string;
-  elapsedMs: number;
-}
+export type CitationItem = RagCitation;

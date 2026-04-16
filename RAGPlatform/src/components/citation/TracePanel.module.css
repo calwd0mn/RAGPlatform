@@ -1,3 +1,11 @@
+.panelStack {
+  width: 100%;
+}
+
+.summary :global(.ant-descriptions-item-label) {
+  width: 96px;
+}
+
 .stepText {
   font-size: 13px;
 }

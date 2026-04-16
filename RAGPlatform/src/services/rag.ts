@@ -1,15 +1,7 @@
 import { http } from "./http";
-import type { ApiResponse } from "../types/api";
-import type { CitationItem, TraceItem } from "../types/chat";
+import type { RagAskRequest, RagAskResponse } from "../types/rag";
 
-export interface RagContext {
-  citations: CitationItem[];
-  traces: TraceItem[];
-}
-
-export async function getRagContext(conversationId: string): Promise<RagContext> {
-  const response = await http.get<ApiResponse<RagContext>>(
-    `/rag/conversations/${conversationId}/context`,
-  );
-  return response.data.data;
+export async function askRag(payload: RagAskRequest): Promise<RagAskResponse> {
+  const response = await http.post<RagAskResponse>("/rag/ask", payload);
+  return response.data;
 }

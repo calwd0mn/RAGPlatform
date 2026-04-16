@@ -1,0 +1,48 @@
+.card {
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: #91caff;
+}
+
+.selected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.18);
+}
+
+.title {
+  font-size: 13px;
+}
+
+.excerpt {
+  margin-bottom: 0 !important;
+}
+
+.metaStack {
+  width: 100%;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.metaTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewButton {
+  padding-inline: 0;
+}
+

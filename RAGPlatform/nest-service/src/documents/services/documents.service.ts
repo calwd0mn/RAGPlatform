@@ -15,6 +15,7 @@ import { Document, DocumentDocument } from '../schemas/document.schema';
 import {
   buildDocumentStoragePath,
   isAllowedDocumentFileType,
+  normalizeUploadedOriginalName,
   removeStoredDocumentFile,
 } from '../utils/document-file.util';
 
@@ -35,7 +36,9 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
-    if (!isAllowedDocumentFileType(file.mimetype, file.originalname)) {
+    const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+
+    if (!isAllowedDocumentFileType(file.mimetype, normalizedOriginalName)) {
       throw new BadRequestException('Invalid file type');
     }
 
@@ -49,7 +52,7 @@ export class DocumentsService {
     const createdDocument = new this.documentModel({
       userId: normalizedUserId,
       filename: file.filename,
-      originalName: file.originalname,
+      originalName: normalizedOriginalName,
       mimeType: file.mimetype,
       size: file.size,
       storagePath,

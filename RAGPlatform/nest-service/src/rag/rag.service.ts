@@ -39,7 +39,7 @@ interface MongoHelloResult {
 
 @Injectable()
 export class RagService {
-  private testTransactionsSupported: boolean | null = null;
+  private transactionsSupported: boolean | null = null;
 
   constructor(
     @InjectModel(Message.name)
@@ -265,32 +265,24 @@ export class RagService {
     return savedMessage;
   }
 
-  private isTestEnvironment(): boolean {
-    return (process.env.NODE_ENV ?? '').trim().toLowerCase() === 'test';
-  }
-
   private async canUseTransaction(): Promise<boolean> {
-    if (!this.isTestEnvironment()) {
-      return true;
-    }
-
-    if (this.testTransactionsSupported !== null) {
-      return this.testTransactionsSupported;
+    if (this.transactionsSupported !== null) {
+      return this.transactionsSupported;
     }
 
     if (!this.connection.db) {
-      this.testTransactionsSupported = false;
-      return this.testTransactionsSupported;
+      this.transactionsSupported = false;
+      return this.transactionsSupported;
     }
 
     try {
       const helloResult = await this.connection.db.admin().command({ hello: 1 }) as MongoHelloResult;
-      this.testTransactionsSupported = Boolean(helloResult.setName);
+      this.transactionsSupported = Boolean(helloResult.setName);
     } catch {
-      this.testTransactionsSupported = false;
+      this.transactionsSupported = false;
     }
 
-    return this.testTransactionsSupported;
+    return this.transactionsSupported;
   }
 
   private toObjectId(value: string): Types.ObjectId {

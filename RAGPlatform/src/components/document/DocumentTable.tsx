@@ -1,8 +1,14 @@
 import { Button, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { DocumentRecord, DocumentStatus } from "../../types/document";
+import styles from "./DocumentTable.module.css";
 
 const statusColorMap: Record<DocumentStatus, string> = {
+  uploaded: "default",
+  parsing: "processing",
+  parsed: "cyan",
+  chunked: "blue",
+  embedded: "geekblue",
   queued: "default",
   processing: "processing",
   ready: "success",
@@ -10,6 +16,11 @@ const statusColorMap: Record<DocumentStatus, string> = {
 };
 
 const statusLabelMap: Record<DocumentStatus, string> = {
+  uploaded: "已上传",
+  parsing: "解析中",
+  parsed: "已解析",
+  chunked: "已切片",
+  embedded: "向量化中",
   queued: "排队中",
   processing: "处理中",
   ready: "可用",
@@ -18,9 +29,15 @@ const statusLabelMap: Record<DocumentStatus, string> = {
 
 interface DocumentTableProps {
   dataSource: DocumentRecord[];
+  highlightedDocumentId?: string;
+  loading?: boolean;
 }
 
-export function DocumentTable({ dataSource }: DocumentTableProps) {
+export function DocumentTable({
+  dataSource,
+  highlightedDocumentId,
+  loading = false,
+}: DocumentTableProps) {
   const columns: ColumnsType<DocumentRecord> = [
     {
       title: "文件名",
@@ -77,7 +94,9 @@ export function DocumentTable({ dataSource }: DocumentTableProps) {
       rowKey="id"
       columns={columns}
       dataSource={dataSource}
+      loading={loading}
       pagination={{ pageSize: 8, showSizeChanger: false }}
+      rowClassName={(record) => (record.id === highlightedDocumentId ? styles.highlightRow : "")}
     />
   );
 }

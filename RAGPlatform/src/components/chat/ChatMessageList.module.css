@@ -1,0 +1,60 @@
+.listWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.rowAssistant {
+  justify-content: flex-start;
+}
+
+.rowUser {
+  justify-content: flex-end;
+}
+
+.avatar {
+  flex-shrink: 0;
+}
+
+.bubble {
+  max-width: min(78%, 680px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid #d9d9d9;
+}
+
+.assistantBubble {
+  background: #ffffff;
+  border-color: #d9d9d9;
+}
+
+.userBubble {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+.meta {
+  margin-bottom: 4px;
+}
+
+.timeText {
+  font-size: 12px;
+}
+
+.paragraph {
+  margin-bottom: 0 !important;
+  white-space: pre-wrap;
+}
+
+.emptyWrap {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

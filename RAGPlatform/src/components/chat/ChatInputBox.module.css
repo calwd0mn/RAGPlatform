@@ -1,0 +1,7 @@
+.stack {
+  width: 100%;
+}
+
+.stack :global(.ant-btn) {
+  align-self: flex-end;
+}

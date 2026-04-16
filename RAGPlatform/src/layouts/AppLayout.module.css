@@ -1,0 +1,32 @@
+.layout {
+  min-height: 100vh;
+}
+
+.header {
+  background: #ffffff;
+  border-bottom: 1px solid #f0f0f0;
+  height: auto;
+  line-height: normal;
+  padding: 12px 20px 0;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.headerTitle {
+  margin: 0 !important;
+  color: #164e63 !important;
+}
+
+.tabs :global(.ant-tabs-nav) {
+  margin-bottom: 0;
+}
+
+.content {
+  padding: 20px;
+  background: #f8fafc;
+}

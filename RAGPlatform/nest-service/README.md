@@ -57,6 +57,51 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## RAG Retrieval Provider
+
+Retrieval provider is configured by environment variables:
+
+```bash
+RAG_RETRIEVAL_PROVIDER=atlas|local
+RAG_TOP_K_DEFAULT=5
+RAG_VECTOR_INDEX_NAME=chunk_vector_index
+RAG_VECTOR_PATH=embedding
+RAG_VECTOR_CANDIDATE_LIMIT=100
+RAG_RETRIEVAL_ALLOW_FALLBACK_TO_LOCAL=false
+```
+
+- `RAG_RETRIEVAL_PROVIDER=atlas` uses MongoDB Atlas Vector Search.
+- `RAG_RETRIEVAL_PROVIDER=local` uses local cosine similarity fallback retriever.
+- In `production`, atlas failure will not silently fall back to local retriever.
+
+### Atlas Vector Index Requirements
+
+Collection: `chunks`  
+Vector path: `embedding`  
+Filter path: `userId`  
+Index name example: `chunk_vector_index`
+
+Example Atlas Vector Search index definition:
+
+```json
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 256,
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "userId"
+    }
+  ]
+}
+```
+
+`numDimensions` must match the actual embedding vector size produced by your configured embeddings provider.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

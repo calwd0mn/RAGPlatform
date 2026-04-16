@@ -1,0 +1,22 @@
+.layout {
+  min-height: 100vh;
+  background: #ecfeff;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  margin-bottom: 20px !important;
+  text-align: center;
+  color: #164e63 !important;
+}

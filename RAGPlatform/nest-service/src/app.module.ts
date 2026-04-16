@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { MessagesModule } from './messages/messages.module';
 import { DocumentsModule } from './documents/documents.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 import { RagModule } from './rag/rag.module';
 
 const shouldConnectMongo =
@@ -31,6 +32,7 @@ const databaseImports = shouldConnectMongo
     ConversationsModule,
     MessagesModule,
     DocumentsModule,
+    IngestionModule,
     RagModule,
   ],
   controllers: [AppController],

@@ -1,0 +1,35 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+
+:global(:root) {
+  --color-primary: #0891b2;
+  --color-primary-weak: #e6f7ff;
+  --color-text-main: #164e63;
+  --color-bg-page: #f8fafc;
+  --radius-base: 10px;
+}
+
+:global(html),
+:global(body),
+:global(#root) {
+  min-height: 100%;
+}
+
+:global(body) {
+  font-family:
+    "Plus Jakarta Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: var(--color-text-main);
+  background: var(--color-bg-page);
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.appTheme {
+  min-height: 100%;
+}

@@ -1,0 +1,16 @@
+.item {
+  border-radius: 10px;
+  padding: 10px 12px !important;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.active {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+.metaText {
+  font-size: 12px;
+}

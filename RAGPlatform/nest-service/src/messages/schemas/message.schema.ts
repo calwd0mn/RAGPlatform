@@ -39,7 +39,13 @@ class MessageTraceSchemaClass implements MessageTrace {
   topK?: number;
 
   @Prop()
+  retrievedCount?: number;
+
+  @Prop()
   model?: string;
+
+  @Prop()
+  retrievalProvider?: string;
 
   @Prop()
   latencyMs?: number;

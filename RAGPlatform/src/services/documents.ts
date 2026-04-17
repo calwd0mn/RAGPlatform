@@ -129,3 +129,7 @@ export async function uploadDocument(file: File): Promise<DocumentRecord> {
 
   return toDocumentRecord(response.data);
 }
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  await http.delete(`/documents/${documentId}`);
+}

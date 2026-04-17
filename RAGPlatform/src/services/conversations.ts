@@ -11,6 +11,10 @@ interface CreateConversationPayload {
   title?: string;
 }
 
+interface UpdateConversationPayload {
+  title: string;
+}
+
 function formatTimeLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -37,4 +41,19 @@ export async function createConversation(
 ): Promise<ConversationItem> {
   const response = await http.post<ConversationResponse>("/conversations", payload);
   return toConversationItem(response.data);
+}
+
+export async function updateConversation(
+  conversationId: string,
+  payload: UpdateConversationPayload,
+): Promise<ConversationItem> {
+  const response = await http.patch<ConversationResponse>(
+    `/conversations/${conversationId}`,
+    payload,
+  );
+  return toConversationItem(response.data);
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await http.delete(`/conversations/${conversationId}`);
 }

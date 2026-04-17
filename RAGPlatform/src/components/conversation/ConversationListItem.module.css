@@ -1,0 +1,29 @@
+.item {
+  border-radius: 10px;
+  padding: 10px 12px !important;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.item:hover {
+  background: #f5f5f5;
+}
+
+.active {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+.itemRow {
+  width: 100%;
+}
+
+.content {
+  min-width: 0;
+}
+
+.metaText {
+  font-size: 12px;
+}

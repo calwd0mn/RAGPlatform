@@ -11,6 +11,14 @@ interface LoadDocumentInput {
   mimeType: string;
 }
 
+async function loadPdfJsModule() {
+  const pdfJsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  return {
+    getDocument: pdfJsModule.getDocument,
+    version: pdfJsModule.version,
+  };
+}
+
 @Injectable()
 export class DocumentLoaderFactory {
   async load(input: LoadDocumentInput): Promise<LangChainDocument[]> {
@@ -20,6 +28,7 @@ export class DocumentLoaderFactory {
     if (this.isPdf(input.mimeType, fileExtension)) {
       const loader = new PDFLoader(absolutePath, {
         splitPages: true,
+        pdfjs: loadPdfJsModule,
       });
       return loader.load();
     }

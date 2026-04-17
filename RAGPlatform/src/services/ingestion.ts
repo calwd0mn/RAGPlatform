@@ -1,13 +1,13 @@
 import { http } from "./http";
 import type { ApiResponse } from "../types/api";
 
-export interface IngestionJob {
-  id: string;
-  status: "queued" | "processing" | "done" | "failed";
-  createdAt: string;
+interface StartIngestionPayload {
+  id?: string;
+  status?: string;
 }
 
-export async function getIngestionJobs(): Promise<IngestionJob[]> {
-  const response = await http.get<ApiResponse<IngestionJob[]>>("/ingestion/jobs");
-  return response.data.data;
+export async function startIngestion(documentId: string): Promise<void> {
+  await http.post<StartIngestionPayload | ApiResponse<StartIngestionPayload>>(
+    `/ingestion/${documentId}/start`,
+  );
 }

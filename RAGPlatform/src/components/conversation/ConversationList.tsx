@@ -1,17 +1,23 @@
-import { List, Space, Typography } from "antd";
+import { List } from "antd";
 import type { ConversationItem } from "../../types/chat";
-import styles from "./ConversationList.module.css";
+import { ConversationListItem } from "./ConversationListItem";
 
 interface ConversationListProps {
   items: ConversationItem[];
   activeId: string;
+  deletingConversationId: string;
   onSelect: (conversationId: string) => void;
+  onRename: (conversation: ConversationItem) => void;
+  onDelete: (conversation: ConversationItem) => void;
 }
 
 export function ConversationList({
   items,
   activeId,
+  deletingConversationId,
   onSelect,
+  onRename,
+  onDelete,
 }: ConversationListProps) {
   return (
     <List
@@ -20,17 +26,14 @@ export function ConversationList({
       renderItem={(item) => {
         const isActive = item.id === activeId;
         return (
-          <List.Item
-            className={`${styles.item} ${isActive ? styles.active : ""}`}
-            onClick={() => onSelect(item.id)}
-          >
-            <Space direction="vertical" size={4}>
-              <Typography.Text strong>{item.title}</Typography.Text>
-              <Typography.Text type="secondary" className={styles.metaText}>
-                更新于 {item.updatedAt}
-              </Typography.Text>
-            </Space>
-          </List.Item>
+          <ConversationListItem
+            item={item}
+            isActive={isActive}
+            isDeleting={item.id === deletingConversationId}
+            onSelect={onSelect}
+            onRename={onRename}
+            onDelete={onDelete}
+          />
         );
       }}
     />

@@ -17,7 +17,9 @@ export function DocumentUploadPanel() {
   const [isUploading, setIsUploading] = useState(false);
   const uploadMutation = useUploadDocument();
 
-  const resolveErrorMessage = (error: AxiosError<ApiErrorPayload> | null): string => {
+  const resolveErrorMessage = (
+    error: AxiosError<ApiErrorPayload> | null,
+  ): string => {
     if (!error?.response?.data?.message) {
       return "上传失败，请稍后重试。";
     }
@@ -25,7 +27,9 @@ export function DocumentUploadPanel() {
     return Array.isArray(errorMessage) ? errorMessage.join("；") : errorMessage;
   };
 
-  const handleChange: UploadProps["onChange"] = ({ fileList: nextFileList }) => {
+  const handleChange: UploadProps["onChange"] = ({
+    fileList: nextFileList,
+  }) => {
     setFileList(nextFileList);
   };
 
@@ -72,20 +76,24 @@ export function DocumentUploadPanel() {
     }
 
     if (successCount > 0) {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.documents.list });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.documents.list,
+      });
     }
 
     if (failedCount === 0) {
       message.success(`上传完成：成功 ${successCount} 个文件。`);
     } else {
-      message.warning(`上传完成：成功 ${successCount} 个，失败 ${failedCount} 个。`);
+      message.warning(
+        `上传完成：成功 ${successCount} 个，失败 ${failedCount} 个。`,
+      );
     }
 
     setIsUploading(false);
   };
 
   return (
-    <Space orientation="vertical" size={12} className={styles.wrapper}>
+    <div className={styles.wrapper}>
       <Dragger
         multiple
         beforeUpload={() => false}
@@ -98,7 +106,9 @@ export function DocumentUploadPanel() {
           <InboxOutlined />
         </p>
         <p className="ant-upload-text">拖拽文件到此处，或点击上传</p>
-        <p className="ant-upload-hint">支持 PDF / DOCX / TXT，后续将接入 ingestion 接口。</p>
+        <p className="ant-upload-hint">
+          支持 PDF / DOCX / TXT。上传后可在列表中开始入库。
+        </p>
         <Space className={styles.buttonWrap}>
           <Button type="primary" icon={<UploadOutlined />}>
             选择文件
@@ -117,10 +127,13 @@ export function DocumentUploadPanel() {
         >
           开始上传
         </Button>
-        <Button onClick={() => setFileList([])} disabled={isUploading || !fileList.length}>
+        <Button
+          onClick={() => setFileList([])}
+          disabled={isUploading || !fileList.length}
+        >
           清空列表
         </Button>
       </Space>
-    </Space>
+    </div>
   );
 }

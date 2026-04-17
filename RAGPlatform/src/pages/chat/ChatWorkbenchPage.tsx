@@ -1,20 +1,24 @@
 import type { AxiosError } from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Col, Row, Space, Tabs, Typography } from "antd";
+import { Alert, Col, Row, Tabs, Typography, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatInputBox } from "../../components/chat/ChatInputBox";
 import { ChatMessageList } from "../../components/chat/ChatMessageList";
 import { EvidencePanel } from "../../components/citation/EvidencePanel";
 import { TracePanel } from "../../components/citation/TracePanel";
 import { PageSectionCard } from "../../components/common/PageSectionCard";
+import { RenameConversationModal } from "../../components/conversation/RenameConversationModal";
 import { ConversationSidebar } from "../../components/conversation/ConversationSidebar";
+import { KnowledgeBaseStatusBar } from "../../components/document/KnowledgeBaseStatusBar";
 import { useConversationList } from "../../hooks/chat/useConversationList";
 import { useCreateConversation } from "../../hooks/chat/useCreateConversation";
+import { useDeleteConversation } from "../../hooks/chat/useDeleteConversation";
 import { useMessageList } from "../../hooks/chat/useMessageList";
 import { useRagAsk } from "../../hooks/chat/useRagAsk";
+import { useUpdateConversation } from "../../hooks/chat/useUpdateConversation";
 import { useCitationWorkspaceStore } from "../../stores/citation-workspace.store";
 import type { ApiErrorPayload } from "../../types/api";
-import type { ChatMessage } from "../../types/chat";
+import type { ChatMessage, ConversationItem } from "../../types/chat";
 import type { RagCitation } from "../../types/rag";
 import styles from "./ChatWorkbenchPage.module.css";
 
@@ -32,15 +36,29 @@ export function ChatWorkbenchPage() {
   const navigate = useNavigate();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const [draft, setDraft] = useState("");
-  const [activePanelTab, setActivePanelTab] = useState<EvidenceTabKey>("evidence");
-  const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<string | null>(null);
+  const [activePanelTab, setActivePanelTab] =
+    useState<EvidenceTabKey>("evidence");
+  const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<
+    string | null
+  >(null);
   const [submitErrorMessage, setSubmitErrorMessage] = useState("");
-  const selectedCitation = useCitationWorkspaceStore((state) => state.selectedCitation);
-  const setSelectedCitation = useCitationWorkspaceStore((state) => state.setSelectedCitation);
-  const clearSelectedCitation = useCitationWorkspaceStore((state) => state.clearSelectedCitation);
+  const [renameTargetConversation, setRenameTargetConversation] =
+    useState<ConversationItem | null>(null);
+  const [deletingConversationId, setDeletingConversationId] = useState("");
+  const selectedCitation = useCitationWorkspaceStore(
+    (state) => state.selectedCitation,
+  );
+  const setSelectedCitation = useCitationWorkspaceStore(
+    (state) => state.setSelectedCitation,
+  );
+  const clearSelectedCitation = useCitationWorkspaceStore(
+    (state) => state.clearSelectedCitation,
+  );
 
   const conversationListQuery = useConversationList();
   const createConversationMutation = useCreateConversation();
+  const updateConversationMutation = useUpdateConversation();
+  const deleteConversationMutation = useDeleteConversation();
   const messageListQuery = useMessageList(conversationId);
   const ragAskMutation = useRagAsk();
 
@@ -56,14 +74,19 @@ export function ChatWorkbenchPage() {
   }, [conversationId, conversationListQuery.data, navigate]);
 
   const activeConversationId = conversationId ?? "";
-  const isSubmitting = ragAskMutation.isPending || createConversationMutation.isPending;
+  const isSubmitting =
+    ragAskMutation.isPending || createConversationMutation.isPending;
   const messages = messageListQuery.data ?? [];
   const assistantMessages = useMemo(
-    () => messages.filter((item): item is ChatMessage => item.role === "assistant"),
+    () =>
+      messages.filter((item): item is ChatMessage => item.role === "assistant"),
     [messages],
   );
   const currentConversationSelectedCitation = useMemo(() => {
-    if (!selectedCitation || selectedCitation.conversationId !== activeConversationId) {
+    if (
+      !selectedCitation ||
+      selectedCitation.conversationId !== activeConversationId
+    ) {
       return null;
     }
     return selectedCitation;
@@ -75,20 +98,27 @@ export function ChatWorkbenchPage() {
     }
     if (currentConversationSelectedCitation) {
       const matchedByCitation = assistantMessages.find(
-        (item) => item.id === currentConversationSelectedCitation.assistantMessageId,
+        (item) =>
+          item.id === currentConversationSelectedCitation.assistantMessageId,
       );
       if (matchedByCitation) {
         return matchedByCitation;
       }
     }
     if (activeAssistantMessageId) {
-      const matchedMessage = assistantMessages.find((item) => item.id === activeAssistantMessageId);
+      const matchedMessage = assistantMessages.find(
+        (item) => item.id === activeAssistantMessageId,
+      );
       if (matchedMessage) {
         return matchedMessage;
       }
     }
     return assistantMessages[assistantMessages.length - 1];
-  }, [activeAssistantMessageId, assistantMessages, currentConversationSelectedCitation]);
+  }, [
+    activeAssistantMessageId,
+    assistantMessages,
+    currentConversationSelectedCitation,
+  ]);
 
   useEffect(() => {
     setActiveAssistantMessageId(null);
@@ -109,7 +139,9 @@ export function ChatWorkbenchPage() {
       return;
     }
 
-    setActiveAssistantMessageId(assistantMessages[assistantMessages.length - 1].id);
+    setActiveAssistantMessageId(
+      assistantMessages[assistantMessages.length - 1].id,
+    );
   }, [activeAssistantMessageId, assistantMessages]);
 
   useEffect(() => {
@@ -118,7 +150,8 @@ export function ChatWorkbenchPage() {
     }
 
     const matchedMessage = assistantMessages.find(
-      (item) => item.id === currentConversationSelectedCitation.assistantMessageId,
+      (item) =>
+        item.id === currentConversationSelectedCitation.assistantMessageId,
     );
 
     if (!matchedMessage) {
@@ -133,7 +166,11 @@ export function ChatWorkbenchPage() {
     ) {
       clearSelectedCitation();
     }
-  }, [assistantMessages, clearSelectedCitation, currentConversationSelectedCitation]);
+  }, [
+    assistantMessages,
+    clearSelectedCitation,
+    currentConversationSelectedCitation,
+  ]);
 
   const handleSubmit = async () => {
     const query = draft.trim();
@@ -147,7 +184,8 @@ export function ChatWorkbenchPage() {
       let targetConversationId = activeConversationId;
 
       if (!targetConversationId) {
-        const createdConversation = await createConversationMutation.mutateAsync({});
+        const createdConversation =
+          await createConversationMutation.mutateAsync({});
         targetConversationId = createdConversation.id;
         navigate(`/app/chat/${createdConversation.id}`);
       }
@@ -182,13 +220,66 @@ export function ChatWorkbenchPage() {
     );
   };
 
+  const handleOpenRenameConversation = (conversation: ConversationItem) => {
+    setRenameTargetConversation(conversation);
+  };
+
+  const handleCloseRenameConversation = () => {
+    setRenameTargetConversation(null);
+  };
+
+  const handleRenameConversation = async (title: string) => {
+    if (!renameTargetConversation) {
+      return;
+    }
+    await updateConversationMutation.mutateAsync({
+      conversationId: renameTargetConversation.id,
+      title,
+    });
+    setRenameTargetConversation(null);
+  };
+
+  const handleDeleteConversation = async (conversation: ConversationItem) => {
+    const currentList = conversationListQuery.data ?? [];
+    const remainingConversations = currentList.filter(
+      (item) => item.id !== conversation.id,
+    );
+
+    setDeletingConversationId(conversation.id);
+    try {
+      await deleteConversationMutation.mutateAsync({
+        conversationId: conversation.id,
+      });
+
+      if (conversation.id !== activeConversationId) {
+        return;
+      }
+
+      const nextConversation = remainingConversations[0];
+      if (nextConversation) {
+        navigate(`/app/chat/${nextConversation.id}`, { replace: true });
+        return;
+      }
+
+      navigate("/app/chat", { replace: true });
+    } catch (error) {
+      const requestError = error as AxiosError<ApiErrorPayload>;
+      message.error(getApiErrorMessage(requestError));
+    } finally {
+      setDeletingConversationId("");
+    }
+  };
+
   const handlePanelTabChange = (nextTab: string) => {
     if (nextTab === "evidence" || nextTab === "trace") {
       setActivePanelTab(nextTab);
     }
   };
 
-  const handleAssistantPanelNavigate = (messageId: string, tab: EvidenceTabKey) => {
+  const handleAssistantPanelNavigate = (
+    messageId: string,
+    tab: EvidenceTabKey,
+  ) => {
     setActiveAssistantMessageId(messageId);
     setActivePanelTab(tab);
     if (selectedCitation?.assistantMessageId !== messageId) {
@@ -219,7 +310,10 @@ export function ChatWorkbenchPage() {
     setActivePanelTab("evidence");
   };
 
-  const handleEvidenceCitationSelect = (message: ChatMessage, citationIndex: number) => {
+  const handleEvidenceCitationSelect = (
+    message: ChatMessage,
+    citationIndex: number,
+  ) => {
     const citations = message.citations ?? [];
     const targetCitation = citations[citationIndex];
     if (!targetCitation) {
@@ -229,13 +323,16 @@ export function ChatWorkbenchPage() {
   };
 
   const askErrorMessage =
-    submitErrorMessage || (ragAskMutation.isError ? getApiErrorMessage(ragAskMutation.error) : "");
+    submitErrorMessage ||
+    (ragAskMutation.isError ? getApiErrorMessage(ragAskMutation.error) : "");
 
   return (
-    <Space direction="vertical" size={16} className={styles.pageStack}>
+    <div className={styles.pageStack}>
       <Typography.Title level={4} className={styles.pageTitle}>
         对话工作台
       </Typography.Title>
+
+      <KnowledgeBaseStatusBar />
 
       <Row gutter={[16, 16]} className={styles.layoutRow}>
         <Col xs={24} lg={6} className={styles.stretchCol}>
@@ -247,8 +344,11 @@ export function ChatWorkbenchPage() {
               isError={conversationListQuery.isError}
               errorMessage={getApiErrorMessage(conversationListQuery.error)}
               isCreating={createConversationMutation.isPending}
+              deletingConversationId={deletingConversationId}
               onSelect={handleSelectConversation}
               onCreate={handleCreateConversation}
+              onRename={handleOpenRenameConversation}
+              onDelete={handleDeleteConversation}
             />
           </PageSectionCard>
         </Col>
@@ -259,14 +359,18 @@ export function ChatWorkbenchPage() {
               <div className={styles.messagesViewport}>
                 <ChatMessageList
                   items={messages}
-                  loading={Boolean(activeConversationId) && messageListQuery.isLoading}
+                  loading={
+                    Boolean(activeConversationId) && messageListQuery.isLoading
+                  }
                   errorMessage={
                     activeConversationId && messageListQuery.isError
                       ? getApiErrorMessage(messageListQuery.error)
                       : undefined
                   }
                   emptyDescription={
-                    activeConversationId ? "暂无消息，开始你的第一轮问答" : "暂无会话，请先新建会话"
+                    activeConversationId
+                      ? "暂无消息，开始你的第一轮问答"
+                      : "暂无会话，请先新建会话"
                   }
                   activeAssistantMessageId={activeAssistantMessage?.id}
                   selectedCitation={currentConversationSelectedCitation}
@@ -322,6 +426,14 @@ export function ChatWorkbenchPage() {
           </PageSectionCard>
         </Col>
       </Row>
-    </Space>
+
+      <RenameConversationModal
+        open={Boolean(renameTargetConversation)}
+        conversation={renameTargetConversation}
+        confirmLoading={updateConversationMutation.isPending}
+        onCancel={handleCloseRenameConversation}
+        onSubmit={handleRenameConversation}
+      />
+    </div>
   );
 }

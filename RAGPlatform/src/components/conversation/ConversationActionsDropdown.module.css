@@ -1,0 +1,9 @@
+.menu {
+  min-width: 124px;
+  padding: 4px;
+}
+
+.menuButton {
+  justify-content: flex-start;
+  width: 100%;
+}

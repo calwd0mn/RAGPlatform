@@ -1,4 +1,5 @@
 import {
+  BugOutlined,
   FileTextOutlined,
   LogoutOutlined,
   MessageOutlined,
@@ -22,7 +23,11 @@ export function AppLayout() {
   };
 
   const activeTabKey =
-    location.pathname.startsWith("/app/documents") ? "/app/documents" : "/app/chat";
+    location.pathname.startsWith("/app/documents")
+      ? "/app/documents"
+      : location.pathname.startsWith("/app/debug")
+        ? "/app/debug"
+        : "/app/chat";
 
   return (
     <Layout className={styles.layout}>
@@ -54,6 +59,15 @@ export function AppLayout() {
                 <Space size={6}>
                   <MessageOutlined />
                   对话
+                </Space>
+              ),
+            },
+            {
+              key: "/app/debug",
+              label: (
+                <Space size={6}>
+                  <BugOutlined />
+                  调试
                 </Space>
               ),
             },

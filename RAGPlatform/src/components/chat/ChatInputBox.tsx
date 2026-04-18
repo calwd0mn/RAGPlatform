@@ -1,5 +1,5 @@
 import { Button, Input, Space } from "antd";
-import { SendOutlined } from "@ant-design/icons";
+import { SendOutlined, StopOutlined } from "@ant-design/icons";
 import type { KeyboardEvent } from "react";
 import styles from "./ChatInputBox.module.css";
 
@@ -7,7 +7,9 @@ interface ChatInputBoxProps {
   value: string;
   onChange: (nextValue: string) => void;
   onSubmit: () => void;
+  onAbort?: () => void;
   submitting?: boolean;
+  streaming?: boolean;
   disabled?: boolean;
 }
 
@@ -15,7 +17,9 @@ export function ChatInputBox({
   value,
   onChange,
   onSubmit,
+  onAbort,
   submitting = false,
+  streaming = false,
   disabled = false,
 }: ChatInputBoxProps) {
   const handlePressEnter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -28,6 +32,7 @@ export function ChatInputBox({
     event.preventDefault();
     onSubmit();
   };
+  const isButtonDisabled = disabled || (submitting && !streaming);
 
   return (
     <Space direction="vertical" size={12} className={styles.stack}>
@@ -40,13 +45,14 @@ export function ChatInputBox({
         disabled={disabled}
       />
       <Button
-        type="primary"
-        icon={<SendOutlined />}
-        onClick={onSubmit}
-        loading={submitting}
-        disabled={disabled}
+        type={streaming ? "default" : "primary"}
+        danger={streaming}
+        icon={streaming ? <StopOutlined /> : <SendOutlined />}
+        onClick={streaming ? onAbort : onSubmit}
+        loading={submitting && !streaming}
+        disabled={isButtonDisabled}
       >
-        发送消息
+        {streaming ? "停止生成" : "发送消息"}
       </Button>
     </Space>
   );

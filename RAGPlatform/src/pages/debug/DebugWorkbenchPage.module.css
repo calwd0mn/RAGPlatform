@@ -1,0 +1,212 @@
+.pageStack {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pageTitle {
+  margin: 0 !important;
+}
+
+.layoutRow {
+  flex: 1;
+  min-height: 0;
+}
+
+.stretchCol {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stretchCol > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tuneGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  height: 100%;
+}
+
+.tuneSection {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfdff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toggleRow,
+.numberRow,
+.chunkMetricRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.promptLegend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.promptPreview {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #0f172a;
+  font-family: "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: auto;
+  max-height: 320px;
+}
+
+.chunkPreviewBlock {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.chunkPreviewText {
+  margin-bottom: 0 !important;
+}
+
+.resultSurface {
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-left-width: 5px;
+  background: #f8fafc;
+}
+
+.resultPrompt {
+  border-left-color: #2563eb;
+}
+
+.resultLatency {
+  border-left-color: #f97316;
+}
+
+.timelineRow {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.timelineName {
+  font-weight: 600;
+}
+
+.timelineBarWrap {
+  width: 100%;
+  height: 10px;
+  border-radius: 8px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.timelineBar {
+  height: 100%;
+  border-radius: 8px;
+}
+
+.jsonToolbar {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 10px;
+}
+
+.jsonViewerWrap {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.compareToolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compareSelect {
+  width: 100%;
+}
+
+.compareJsonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compareJsonBlock {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .tuneGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 992px) {
+  .pageHeader {
+    flex-direction: column;
+  }
+
+  .compareToolbar,
+  .compareJsonGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,12 +6,8 @@
 
 .row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px;
-}
-
-.rowAssistant {
-  justify-content: flex-start;
 }
 
 .rowUser {
@@ -23,20 +19,10 @@
 }
 
 .bubble {
-  max-width: min(78%, 680px);
+  max-width: min(76%, 680px);
   border-radius: 14px;
   padding: 10px 12px;
   border: 1px solid #d9d9d9;
-}
-
-.assistantBubble {
-  background: #ffffff;
-  border-color: #d9d9d9;
-}
-
-.assistantSelected {
-  border-color: #1677ff;
-  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.28);
 }
 
 .userBubble {
@@ -55,48 +41,11 @@
 .paragraph {
   margin-bottom: 0 !important;
   white-space: pre-wrap;
+  line-height: 1.65;
 }
 
 .contentWrap {
   overflow: hidden;
-}
-
-.contentCollapsed {
-  display: -webkit-box;
-  -webkit-line-clamp: 6;
-  -webkit-box-orient: vertical;
-}
-
-.contentExpanded {
-  max-height: none;
-  overflow: visible;
-  padding-right: 0;
-}
-
-.expandToggle {
-  margin-top: 6px;
-  padding: 0;
-}
-
-.actions {
-  margin-top: 8px;
-}
-
-.actionLink {
-  font-size: 12px;
-}
-
-.citationTags {
-  margin-top: 8px;
-}
-
-.citationTag {
-  cursor: pointer;
-  user-select: none;
-}
-
-.citationTagSelected {
-  font-weight: 600;
 }
 
 .emptyWrap {

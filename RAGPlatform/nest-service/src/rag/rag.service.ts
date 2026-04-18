@@ -37,6 +37,11 @@ interface MongoHelloResult {
   setName?: string;
 }
 
+interface AskExecutionOptions {
+  onToken?: (token: string) => Promise<void> | void;
+  signal?: AbortSignal;
+}
+
 @Injectable()
 export class RagService {
   private transactionsSupported: boolean | null = null;
@@ -110,22 +115,12 @@ export class RagService {
 
     const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
 
-    let answer: string;
-    try {
-      const model = await this.ragChatModelFactory.create(preparedAnswer);
-      const prompt = ChatPromptTemplate.fromMessages([
-        ['system', RAG_SYSTEM_PROMPT],
-        ['system', '检索上下文如下：\n{context}'],
-        new MessagesPlaceholder('history'),
-      ]);
-      const chain = RunnableSequence.from([prompt, model, new StringOutputParser()]);
-      answer = (await chain.invoke({
-        context,
-        history: this.messageHistoryMapper.toLangchainMessages(historyItems),
-      })).trim();
-    } catch {
-      throw new InternalServerErrorException('Failed to generate answer');
-    }
+    const answer = await this.generateAnswer({
+      preparedAnswer,
+      context,
+      historyItems,
+      options: {},
+    });
 
     const trace: MessageTrace = {
       query,
@@ -160,6 +155,158 @@ export class RagService {
       userMessageId: userMessage.id,
       assistantMessageId: assistantMessage.id,
     };
+  }
+
+  async askStream(
+    userId: string,
+    dto: AskRagDto,
+    options: AskExecutionOptions,
+  ): Promise<RagAnswer> {
+    const query = dto.query.trim();
+    if (query.length === 0) {
+      throw new BadRequestException('query must not be empty');
+    }
+
+    const topK = dto.topK ?? getRagRetrievalConfig().topKDefault;
+    const startedAt = Date.now();
+
+    await this.conversationsService.ensureOwnedConversation(userId, dto.conversationId);
+
+    const userMessage = await this.createMessageAndTouch({
+      userId,
+      conversationId: dto.conversationId,
+      role: MessageRoleEnum.User,
+      content: query,
+      citations: [],
+      trace: undefined,
+    });
+
+    const historyItems = await this.findRecentHistory(userId, dto.conversationId, HISTORY_LIMIT);
+
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await this.embeddingsFactory.createEmbeddings().embedQuery(query);
+    } catch {
+      throw new InternalServerErrorException('Failed to generate query embedding');
+    }
+
+    let retrievedChunks: RetrievedChunk[];
+    let retrievalProvider: string;
+    try {
+      const retrievalOutput =
+        await this.ragRetrievalService.retrieveTopKByUserWithProvider(
+          userId,
+          queryEmbedding,
+          topK,
+        );
+      retrievedChunks = retrievalOutput.chunks;
+      retrievalProvider = retrievalOutput.provider;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('Failed to retrieve relevant chunks');
+    }
+
+    const context = this.ragContextBuilder.build(retrievedChunks);
+    const citations = retrievedChunks.map((chunk): RagCitation =>
+      this.chunkToCitationMapper.map(chunk),
+    );
+
+    const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
+    const answer = await this.generateAnswer({
+      preparedAnswer,
+      context,
+      historyItems,
+      options,
+    });
+
+    const trace: MessageTrace = {
+      query,
+      topK,
+      retrievedCount: retrievedChunks.length,
+      model: this.ragChatModelFactory.getModelLabel(),
+      retrievalProvider,
+      latencyMs: Date.now() - startedAt,
+    };
+
+    const assistantMessage = await this.createMessageAndTouch({
+      userId,
+      conversationId: dto.conversationId,
+      role: MessageRoleEnum.Assistant,
+      content: answer,
+      citations,
+      trace,
+    });
+
+    return {
+      answer,
+      citations,
+      trace: {
+        query,
+        topK,
+        retrievedCount: retrievedChunks.length,
+        model: this.ragChatModelFactory.getModelLabel(),
+        retrievalProvider,
+        latencyMs: trace.latencyMs ?? 0,
+      },
+      conversationId: dto.conversationId,
+      userMessageId: userMessage.id,
+      assistantMessageId: assistantMessage.id,
+    };
+  }
+
+  private async generateAnswer(input: {
+    preparedAnswer: string;
+    context: string;
+    historyItems: HistoryMessageItem[];
+    options: AskExecutionOptions;
+  }): Promise<string> {
+    try {
+      const model = await this.ragChatModelFactory.create(input.preparedAnswer);
+      const prompt = ChatPromptTemplate.fromMessages([
+        ['system', RAG_SYSTEM_PROMPT],
+        ['system', '检索上下文如下：\n{context}'],
+        new MessagesPlaceholder('history'),
+      ]);
+      const chain = RunnableSequence.from([prompt, model, new StringOutputParser()]);
+      const chainInput = {
+        context: input.context,
+        history: this.messageHistoryMapper.toLangchainMessages(input.historyItems),
+      };
+      const chainConfig = input.options.signal
+        ? {
+            signal: input.options.signal,
+          }
+        : undefined;
+
+      if (!input.options.onToken) {
+        return (await chain.invoke(chainInput, chainConfig)).trim();
+      }
+
+      let answerBuffer = '';
+      const outputStream = await chain.stream(chainInput, chainConfig);
+      for await (const chunk of outputStream) {
+        if (typeof chunk !== 'string' || chunk.length === 0) {
+          continue;
+        }
+        if (input.options.signal?.aborted) {
+          throw new InternalServerErrorException('Generation aborted');
+        }
+        answerBuffer += chunk;
+        await input.options.onToken(chunk);
+      }
+
+      const trimmedAnswer = answerBuffer.trim();
+      if (trimmedAnswer.length > 0) {
+        return trimmedAnswer;
+      }
+
+      return (await chain.invoke(chainInput, chainConfig)).trim();
+    } catch {
+      throw new InternalServerErrorException('Failed to generate answer');
+    }
   }
 
   private prepareFallbackAnswer(chunks: RetrievedChunk[]): string {

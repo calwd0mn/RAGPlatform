@@ -9,6 +9,7 @@ import { MessagesModule } from './messages/messages.module';
 import { DocumentsModule } from './documents/documents.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { RagModule } from './rag/rag.module';
+import { ChunksModule } from './chunks/chunks.module';
 
 const shouldConnectMongo =
   process.env.NODE_ENV !== 'test' || Boolean(process.env.MONGODB_URI);
@@ -34,6 +35,7 @@ const databaseImports = shouldConnectMongo
     DocumentsModule,
     IngestionModule,
     RagModule,
+    ChunksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,0 +1,204 @@
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rowSelected .card {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.14);
+}
+
+.avatar {
+  flex-shrink: 0;
+}
+
+.card {
+  width: min(88%, 760px);
+  border: 1px solid #d9d9d9;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.timeText {
+  font-size: 12px;
+}
+
+.sectionLabel {
+  font-size: 12px;
+}
+
+.bodySection,
+.actionSection,
+.evidenceSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bodyContent {
+  border-left: 3px solid #e6f4ff;
+  padding-left: 10px;
+}
+
+.markdownBody {
+  line-height: 1.65;
+  color: rgba(0, 0, 0, 0.88);
+  word-break: break-word;
+}
+
+.markdownBody :global(*) {
+  box-sizing: border-box;
+}
+
+.markdownBody :global(p) {
+  margin: 0 0 10px;
+}
+
+.markdownBody :global(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdownBody :global(h1),
+.markdownBody :global(h2),
+.markdownBody :global(h3),
+.markdownBody :global(h4) {
+  margin: 12px 0 8px;
+  line-height: 1.4;
+}
+
+.markdownBody :global(ul),
+.markdownBody :global(ol) {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.markdownBody :global(blockquote) {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-left: 3px solid #91caff;
+  background: #f7fbff;
+  color: rgba(0, 0, 0, 0.72);
+}
+
+.markdownBody :global(pre) {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.markdownBody :global(code) {
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
+.markdownBody :global(:not(pre) > code) {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #f2f4f8;
+  color: #1f2937;
+}
+
+.markdownBody :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 10px;
+}
+
+.markdownBody :global(th),
+.markdownBody :global(td) {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.markdownBody :global(th) {
+  background: #f8fafc;
+}
+
+.actionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.actionButton {
+  padding-inline: 0 !important;
+}
+
+.evidenceList {
+  width: 100%;
+}
+
+.citationGroup {
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fcfcfc;
+}
+
+.citationGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.citationGroupTitle {
+  font-size: 13px;
+}
+
+.citationSummary {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.citationSummary:hover {
+  border-color: #91caff;
+}
+
+.citationSummarySelected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.18);
+}
+
+.citationTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.citationTitle {
+  font-size: 13px;
+}
+
+.citationExcerpt {
+  margin-bottom: 0 !important;
+  color: rgba(0, 0, 0, 0.72);
+}

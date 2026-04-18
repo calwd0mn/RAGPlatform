@@ -1,4 +1,4 @@
-import { Alert, Descriptions, Empty, Space } from "antd";
+import { Alert, Descriptions, Empty, Space, Tag } from "antd";
 import type { ChatMessage } from "../../types/chat";
 import styles from "./TracePanel.module.css";
 
@@ -8,12 +8,22 @@ interface TracePanelProps {
 
 export function TracePanel({ message }: TracePanelProps) {
   if (!message) {
-    return <Empty description="当前会话还没有 assistant 回答" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return (
+      <Empty
+        description="当前会话还没有 assistant 回答"
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      />
+    );
   }
 
   const trace = message.trace;
   if (!trace) {
-    return <Empty description="该回答没有 trace 数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return (
+      <Space direction="vertical" size={12} className={styles.panelStack}>
+        <Alert type="info" showIcon title="当前回答未返回 trace 元数据。" />
+        <Empty description="该回答没有 trace 数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </Space>
+    );
   }
 
   return (
@@ -21,6 +31,12 @@ export function TracePanel({ message }: TracePanelProps) {
       {trace.retrievedCount === 0 ? (
         <Alert type="warning" showIcon title="retrievedCount = 0，本轮没有召回到文档。" />
       ) : null}
+
+      <Space size={8} wrap>
+        <Tag color="blue">Trace 已加载</Tag>
+        <Tag>TopK {trace.topK ?? "-"}</Tag>
+        <Tag>Retrieved {trace.retrievedCount ?? "-"}</Tag>
+      </Space>
 
       <Descriptions size="small" column={1} className={styles.summary}>
         <Descriptions.Item label="Query">{trace.query ?? "-"}</Descriptions.Item>

@@ -1,5 +1,6 @@
-import type { AxiosError } from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { AxiosError } from "axios";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Col, Row, Tabs, Typography, message } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatInputBox } from "../../components/chat/ChatInputBox";
@@ -10,12 +11,13 @@ import { PageSectionCard } from "../../components/common/PageSectionCard";
 import { RenameConversationModal } from "../../components/conversation/RenameConversationModal";
 import { ConversationSidebar } from "../../components/conversation/ConversationSidebar";
 import { KnowledgeBaseStatusBar } from "../../components/document/KnowledgeBaseStatusBar";
+import { queryKeys } from "../../constants/queryKeys";
 import { useConversationList } from "../../hooks/chat/useConversationList";
 import { useCreateConversation } from "../../hooks/chat/useCreateConversation";
 import { useDeleteConversation } from "../../hooks/chat/useDeleteConversation";
 import { useMessageList } from "../../hooks/chat/useMessageList";
-import { useRagAsk } from "../../hooks/chat/useRagAsk";
 import { useUpdateConversation } from "../../hooks/chat/useUpdateConversation";
+import { askRagStream } from "../../services/rag";
 import { useCitationWorkspaceStore } from "../../stores/citation-workspace.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage, ConversationItem } from "../../types/chat";
@@ -32,8 +34,17 @@ function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
   return Array.isArray(message) ? message.join("；") : message;
 }
 
+function getGenericErrorMessage(error: Error): string {
+  const message = error.message.trim();
+  if (message.length === 0) {
+    return "请求失败，请稍后重试。";
+  }
+  return message;
+}
+
 export function ChatWorkbenchPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const [draft, setDraft] = useState("");
   const [activePanelTab, setActivePanelTab] =
@@ -45,6 +56,10 @@ export function ChatWorkbenchPage() {
   const [renameTargetConversation, setRenameTargetConversation] =
     useState<ConversationItem | null>(null);
   const [deletingConversationId, setDeletingConversationId] = useState("");
+  const [isStreamingAnswer, setIsStreamingAnswer] = useState(false);
+  const [streamingAssistantMessage, setStreamingAssistantMessage] =
+    useState<ChatMessage | null>(null);
+  const streamingAbortControllerRef = useRef<AbortController | null>(null);
   const selectedCitation = useCitationWorkspaceStore(
     (state) => state.selectedCitation,
   );
@@ -60,7 +75,6 @@ export function ChatWorkbenchPage() {
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
   const messageListQuery = useMessageList(conversationId);
-  const ragAskMutation = useRagAsk();
 
   useEffect(() => {
     if (conversationId) {
@@ -74,9 +88,14 @@ export function ChatWorkbenchPage() {
   }, [conversationId, conversationListQuery.data, navigate]);
 
   const activeConversationId = conversationId ?? "";
-  const isSubmitting =
-    ragAskMutation.isPending || createConversationMutation.isPending;
-  const messages = messageListQuery.data ?? [];
+  const isSubmitting = isStreamingAnswer || createConversationMutation.isPending;
+  const persistedMessages = messageListQuery.data ?? [];
+  const messages = useMemo(() => {
+    if (!streamingAssistantMessage || streamingAssistantMessage.id.length === 0) {
+      return persistedMessages;
+    }
+    return [...persistedMessages, streamingAssistantMessage];
+  }, [persistedMessages, streamingAssistantMessage]);
   const assistantMessages = useMemo(
     () =>
       messages.filter((item): item is ChatMessage => item.role === "assistant"),
@@ -124,7 +143,19 @@ export function ChatWorkbenchPage() {
     setActiveAssistantMessageId(null);
     setActivePanelTab("evidence");
     clearSelectedCitation();
+    streamingAbortControllerRef.current?.abort();
+    streamingAbortControllerRef.current = null;
+    setIsStreamingAnswer(false);
+    setStreamingAssistantMessage(null);
   }, [activeConversationId, clearSelectedCitation]);
+
+  useEffect(
+    () => () => {
+      streamingAbortControllerRef.current?.abort();
+      streamingAbortControllerRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!assistantMessages.length) {
@@ -179,10 +210,10 @@ export function ChatWorkbenchPage() {
     }
 
     setSubmitErrorMessage("");
+    let targetConversationId = activeConversationId;
+    let shouldRefreshAfterStreamFailure = false;
 
     try {
-      let targetConversationId = activeConversationId;
-
       if (!targetConversationId) {
         const createdConversation =
           await createConversationMutation.mutateAsync({});
@@ -190,19 +221,101 @@ export function ChatWorkbenchPage() {
         navigate(`/app/chat/${createdConversation.id}`);
       }
 
-      const result = await ragAskMutation.mutateAsync({
-        conversationId: targetConversationId,
-        query,
+      const tempAssistantMessageId = `stream-${Date.now()}`;
+      const createdAtLabel = new Date().toLocaleString("zh-CN", {
+        hour12: false,
       });
-
+      const streamController = new AbortController();
+      streamingAbortControllerRef.current?.abort();
+      streamingAbortControllerRef.current = streamController;
+      setIsStreamingAnswer(true);
+      setStreamingAssistantMessage({
+        id: tempAssistantMessageId,
+        role: "assistant",
+        content: "正在生成...",
+        createdAt: createdAtLabel,
+        citations: [],
+        trace: undefined,
+      });
+      setActiveAssistantMessageId(tempAssistantMessageId);
+      setActivePanelTab("evidence");
+      clearSelectedCitation();
       setDraft("");
+      shouldRefreshAfterStreamFailure = true;
+
+      const result = await askRagStream(
+        {
+          conversationId: targetConversationId,
+          query,
+        },
+        {
+          signal: streamController.signal,
+          onToken: (token) => {
+            setStreamingAssistantMessage((previous) => {
+              if (!previous || previous.id !== tempAssistantMessageId) {
+                return previous;
+              }
+              return {
+                ...previous,
+                content:
+                  previous.content === "正在生成..."
+                    ? token
+                    : `${previous.content}${token}`,
+              };
+            });
+          },
+        },
+      );
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(result.conversationId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.list,
+        }),
+      ]);
+
       setActiveAssistantMessageId(result.assistantMessageId);
       setActivePanelTab("evidence");
       clearSelectedCitation();
+      setStreamingAssistantMessage(null);
+      shouldRefreshAfterStreamFailure = false;
     } catch (error) {
-      const requestError = error as AxiosError<ApiErrorPayload>;
-      setSubmitErrorMessage(getApiErrorMessage(requestError));
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setStreamingAssistantMessage(null);
+      } else if (error instanceof AxiosError) {
+        setSubmitErrorMessage(getApiErrorMessage(error));
+        setStreamingAssistantMessage(null);
+      } else if (error instanceof Error) {
+        setSubmitErrorMessage(getGenericErrorMessage(error));
+        setStreamingAssistantMessage(null);
+      } else {
+        setSubmitErrorMessage("请求失败，请稍后重试。");
+        setStreamingAssistantMessage(null);
+      }
+    } finally {
+      if (shouldRefreshAfterStreamFailure && targetConversationId) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.messages.list(targetConversationId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.conversations.list,
+          }),
+        ]);
+      }
+      setIsStreamingAnswer(false);
+      streamingAbortControllerRef.current = null;
     }
+  };
+
+  const handleAbortStreaming = () => {
+    const activeController = streamingAbortControllerRef.current;
+    if (!activeController) {
+      return;
+    }
+    activeController.abort();
   };
 
   const handleSelectConversation = (nextConversationId: string) => {
@@ -322,9 +435,7 @@ export function ChatWorkbenchPage() {
     handleCitationSelect(message, targetCitation, citationIndex);
   };
 
-  const askErrorMessage =
-    submitErrorMessage ||
-    (ragAskMutation.isError ? getApiErrorMessage(ragAskMutation.error) : "");
+  const askErrorMessage = submitErrorMessage;
 
   return (
     <div className={styles.pageStack}>
@@ -391,7 +502,9 @@ export function ChatWorkbenchPage() {
                   value={draft}
                   onChange={setDraft}
                   onSubmit={handleSubmit}
+                  onAbort={handleAbortStreaming}
                   submitting={isSubmitting}
+                  streaming={isStreamingAnswer}
                 />
               </div>
             </div>

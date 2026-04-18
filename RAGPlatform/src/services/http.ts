@@ -10,6 +10,10 @@ function emitUnauthorized(): void {
   unauthorizedListeners.forEach((listener) => listener());
 }
 
+export function notifyUnauthorized(): void {
+  emitUnauthorized();
+}
+
 export function onUnauthorized(listener: UnauthorizedListener): () => void {
   unauthorizedListeners.add(listener);
   return () => {

@@ -15,6 +15,10 @@ export const queryKeys = {
   ingestion: {
     jobs: ["ingestion", "jobs"] as const,
   },
+  chunks: {
+    context: (chunkId: string, before: number, after: number) =>
+      ["chunks", "context", chunkId, before, after] as const,
+  },
   rag: {
     traces: (conversationId: string) =>
       ["rag", "traces", conversationId] as const,

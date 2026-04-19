@@ -11,6 +11,7 @@ export type DocumentStatus =
 
 export interface DocumentRecord {
   id: string;
+  knowledgeBaseId: string;
   filename: string;
   fileType: string;
   sizeLabel: string;

@@ -26,6 +26,7 @@ export interface RagTraceStep {
 }
 
 export interface RagTrace {
+  knowledgeBaseId?: string;
   query?: string;
   rewrittenQuery?: string;
   topK?: number;

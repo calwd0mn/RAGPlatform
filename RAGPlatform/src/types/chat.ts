@@ -2,6 +2,7 @@ import type { RagCitation, RagTrace } from "./rag";
 
 export interface ConversationItem {
   id: string;
+  knowledgeBaseId: string;
   title: string;
   updatedAt: string;
 }

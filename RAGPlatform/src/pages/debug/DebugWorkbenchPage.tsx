@@ -1,10 +1,12 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Alert,
   Button,
   Col,
+  Form,
   Input,
   InputNumber,
-  Modal,
+  Popconfirm,
   Row,
   Select,
   Space,
@@ -12,746 +14,999 @@ import {
   Table,
   Tag,
   Typography,
+  message,
 } from "antd";
-import {
-  ExpandOutlined,
-  PlayCircleOutlined,
-  ReloadOutlined,
-  SaveOutlined,
-} from "@ant-design/icons";
-import JsonView from "@uiw/react-json-view";
-import { useMemo, useState } from "react";
 import type { ColumnsType } from "antd/es/table";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageSectionCard } from "../../components/common/PageSectionCard";
-import { useDocumentList } from "../../hooks/document/useDocumentList";
-import { toDocumentDisplayStatus } from "../../utils/document-status";
+import { useKnowledgeBaseList } from "../../hooks/knowledge-base/useKnowledgeBaseList";
+import {
+  createDebugExperiment,
+  getChunksDebug,
+  getCurrentPrompt,
+  getDebugExperiments,
+  getRagRuns,
+  publishDebugExperiment,
+  runDebugExperiment,
+  updateDebugExperiment,
+} from "../../services/debug";
+import type {
+  ChunkStrategyDraft,
+  ChunksDebugItem,
+  ChunksDebugQuery,
+  ChunksDebugResponse,
+  DebugExperimentCreateRequest,
+  DebugExperimentRecord,
+  DebugExperimentRunResult,
+  DebugExperimentUpdateRequest,
+  PromptDraft,
+  RagPromptCurrentResponse,
+  RagRunListResponse,
+  RagRunRecord,
+} from "../../types/debug";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import styles from "./DebugWorkbenchPage.module.css";
 
-interface StageMetric {
-  key: string;
+interface ExperimentStrategyFormValue {
   name: string;
-  latencyMs: number;
-  color: string;
+  type: "recursive" | "markdown" | "token";
+  chunkSize: number;
+  chunkOverlap: number;
+  preserveSentenceBoundary: boolean;
+  separatorsText?: string;
+  maxSentenceMerge?: number;
+  versionLabel?: string;
 }
 
-interface PromptChunkTunePayload {
-  knowledgeBaseId: string;
-  query: string;
-  prompt: {
-    systemTemplate: string;
-    contextJoiner: "double_newline" | "xml_block" | "json_block";
-    includeCitationHint: boolean;
-    maxContextChunks: number;
-  };
-  chunk: {
-    size: number;
-    overlap: number;
-    boundary: "paragraph" | "sentence" | "hybrid";
-    keepTitlePrefix: boolean;
-  };
-  documentScope: string[];
+interface ExperimentFormValues {
+  queriesText: string;
+  topK: number;
+  mode: "retrieve-only" | "full-rag";
+  basePromptId: string;
+  promptVersionLabel?: string;
+  systemPrompt: string;
+  contextTemplate: string;
+  chunkStrategyDrafts: ExperimentStrategyFormValue[];
 }
 
-interface DebugSnapshot {
-  id: string;
-  label: string;
-  createdAt: string;
-  payload: PromptChunkTunePayload;
+interface ChunkFormValues {
+  experimentId?: string;
+  strategyName?: string;
+  keyword?: string;
+  query?: string;
+  page?: number;
+  limit?: number;
+  offset?: number;
 }
 
-interface SnapshotDiffRow {
-  key: string;
-  field: string;
-  left: string;
-  right: string;
-  status: "same" | "changed";
-}
-
-const STAGE_METRICS: StageMetric[] = [
-  { key: "embedding", name: "Embedding", latencyMs: 81, color: "#2563eb" },
-  { key: "retrieval", name: "Vector Search", latencyMs: 132, color: "#0ea5e9" },
-  { key: "prompt", name: "Prompt Build", latencyMs: 47, color: "#14b8a6" },
-  { key: "ttft", name: "LLM First Token", latencyMs: 468, color: "#f97316" },
-  { key: "generation", name: "Total Generation", latencyMs: 1426, color: "#6366f1" },
-];
-
-const LATENCY_COLUMNS: ColumnsType<StageMetric> = [
-  { title: "Stage", dataIndex: "name", key: "name" },
+const EXPERIMENT_COLUMNS: ColumnsType<DebugExperimentRecord> = [
   {
-    title: "Latency",
-    dataIndex: "latencyMs",
-    key: "latencyMs",
-    width: 160,
-    render: (value: number) => `${value} ms`,
-  },
-];
-
-const SNAPSHOT_DIFF_COLUMNS: ColumnsType<SnapshotDiffRow> = [
-  {
-    title: "参数项",
-    dataIndex: "field",
-    key: "field",
+    title: "时间",
+    dataIndex: "createdAt",
+    key: "createdAt",
     width: 180,
+    render: (value: string) =>
+      new Date(value).toLocaleString("zh-CN", { hour12: false }),
   },
   {
-    title: "快照 A",
-    dataIndex: "left",
-    key: "left",
-  },
-  {
-    title: "快照 B",
-    dataIndex: "right",
-    key: "right",
-  },
-  {
-    title: "变化",
+    title: "状态",
     dataIndex: "status",
     key: "status",
+    width: 110,
+    render: (value: DebugExperimentRecord["status"]) => {
+      const colorMap: Record<DebugExperimentRecord["status"], string> = {
+        draft: "default",
+        running: "processing",
+        completed: "success",
+        failed: "error",
+        published: "gold",
+      };
+      return <Tag color={colorMap[value]}>{value}</Tag>;
+    },
+  },
+  {
+    title: "模式",
+    dataIndex: "mode",
+    key: "mode",
     width: 120,
-    render: (value: SnapshotDiffRow["status"]) =>
-      value === "changed" ? <Tag color="warning">Changed</Tag> : <Tag>Same</Tag>,
+  },
+  {
+    title: "Queries",
+    key: "queries",
+    render: (_, record) => record.queries.length,
+    width: 90,
+  },
+  {
+    title: "策略",
+    key: "strategies",
+    render: (_, record) => record.chunkStrategyDrafts.length,
+    width: 90,
+  },
+  {
+    title: "Namespace",
+    dataIndex: "chunkNamespace",
+    key: "chunkNamespace",
+    ellipsis: true,
   },
 ];
 
-const DEFAULT_SYSTEM_PROMPT =
-  "你是企业知识库问答助手。请严格基于检索到的上下文回答，不确定时明确说明证据不足。";
+const RUN_COLUMNS: ColumnsType<RagRunRecord> = [
+  {
+    title: "时间",
+    dataIndex: "createdAt",
+    key: "createdAt",
+    width: 180,
+    render: (value: string) =>
+      new Date(value).toLocaleString("zh-CN", { hour12: false }),
+  },
+  {
+    title: "类型",
+    dataIndex: "runType",
+    key: "runType",
+    width: 120,
+    render: (value: RagRunRecord["runType"]) => <Tag color="blue">{value}</Tag>,
+  },
+  {
+    title: "来源",
+    dataIndex: "retrievalSource",
+    key: "retrievalSource",
+    width: 120,
+    render: (value: RagRunRecord["retrievalSource"]) =>
+      value ? <Tag color={value === "experiment" ? "purple" : "default"}>{value}</Tag> : "-",
+  },
+  {
+    title: "状态",
+    dataIndex: "status",
+    key: "status",
+    width: 100,
+    render: (value: RagRunRecord["status"]) =>
+      value === "success" ? <Tag color="success">success</Tag> : <Tag color="error">error</Tag>,
+  },
+  {
+    title: "Query",
+    dataIndex: "query",
+    key: "query",
+    ellipsis: true,
+  },
+  {
+    title: "Prompt",
+    dataIndex: "promptVersion",
+    key: "promptVersion",
+    width: 150,
+    ellipsis: true,
+  },
+  {
+    title: "Namespace",
+    dataIndex: "retrievalNamespace",
+    key: "retrievalNamespace",
+    width: 160,
+    ellipsis: true,
+    render: (value: string | undefined) => value ?? "production",
+  },
+];
 
-function buildPromptPreview(
-  systemTemplate: string,
-  contextJoiner: PromptChunkTunePayload["prompt"]["contextJoiner"],
-  query: string,
-): string {
-  return `System:
-${systemTemplate}
+const CHUNK_COLUMNS: ColumnsType<ChunksDebugItem> = [
+  {
+    title: "来源",
+    dataIndex: "retrievalSource",
+    key: "retrievalSource",
+    width: 110,
+    render: (value: ChunksDebugItem["retrievalSource"]) =>
+      <Tag color={value === "experiment" ? "purple" : "default"}>{value}</Tag>,
+  },
+  {
+    title: "策略",
+    dataIndex: "strategyName",
+    key: "strategyName",
+    width: 150,
+    render: (value: string | undefined) => value ?? "-",
+  },
+  {
+    title: "文档",
+    dataIndex: "documentName",
+    key: "documentName",
+    width: 220,
+    ellipsis: true,
+  },
+  {
+    title: "页码",
+    dataIndex: "page",
+    key: "page",
+    width: 80,
+    render: (value: number | undefined) => value ?? "-",
+  },
+  {
+    title: "序号",
+    dataIndex: "order",
+    key: "order",
+    width: 80,
+  },
+  {
+    title: "分数",
+    dataIndex: "score",
+    key: "score",
+    width: 90,
+    render: (value: number | undefined) =>
+      typeof value === "number" ? value.toFixed(4) : "-",
+  },
+  {
+    title: "内容预览",
+    dataIndex: "contentPreview",
+    key: "contentPreview",
+    ellipsis: true,
+  },
+];
 
-Context:
-{{context_chunks | ${contextJoiner}}}
-
-User:
-${query || "{{query}}"}`;
+function parseErrorMessage(input: Error): string {
+  const text = input.message.trim();
+  return text.length > 0 ? text : "请求失败，请稍后重试。";
 }
 
-function normalizeForMatch(value: string): string {
-  return value.trim().toLowerCase();
+function buildPromptDraft(values: ExperimentFormValues): PromptDraft {
+  return {
+    basePromptId: values.basePromptId.trim(),
+    systemPrompt: values.systemPrompt.trim(),
+    contextTemplate: values.contextTemplate.trim(),
+    versionLabel: values.promptVersionLabel?.trim() || undefined,
+  };
 }
 
-function formatSnapshotLabel(index: number): string {
-  return `快照 #${index + 1}`;
+function buildStrategyDrafts(
+  values: ExperimentFormValues,
+): ChunkStrategyDraft[] {
+  return values.chunkStrategyDrafts.map(
+    (item): ChunkStrategyDraft => ({
+      name: item.name.trim(),
+      type: item.type,
+      chunkSize: item.chunkSize,
+      chunkOverlap: item.chunkOverlap,
+      preserveSentenceBoundary: item.preserveSentenceBoundary,
+      separators: (item.separatorsText ?? "")
+        .split(/\r?\n|,/)
+        .map((entry): string => entry.trim())
+        .filter((entry): boolean => entry.length > 0),
+      maxSentenceMerge: item.maxSentenceMerge,
+      versionLabel: item.versionLabel?.trim() || undefined,
+    }),
+  );
+}
+
+function buildExperimentPayload(
+  values: ExperimentFormValues,
+  knowledgeBaseId: string,
+): DebugExperimentCreateRequest {
+  return {
+    knowledgeBaseId,
+    scope: "manual",
+    queries: values.queriesText
+      .split(/\r?\n/)
+      .map((item): string => item.trim())
+      .filter((item): boolean => item.length > 0),
+    promptDraft: buildPromptDraft(values),
+    chunkStrategyDrafts: buildStrategyDrafts(values),
+    topK: values.topK,
+    mode: values.mode,
+  };
+}
+
+function mapExperimentToForm(record: DebugExperimentRecord): ExperimentFormValues {
+  return {
+    queriesText: record.queries.join("\n"),
+    topK: record.topK,
+    mode: record.mode,
+    basePromptId: record.promptDraft.basePromptId,
+    promptVersionLabel: record.promptDraft.versionLabel,
+    systemPrompt: record.promptDraft.systemPrompt,
+    contextTemplate: record.promptDraft.contextTemplate,
+    chunkStrategyDrafts: record.chunkStrategyDrafts.map(
+      (item): ExperimentStrategyFormValue => ({
+        name: item.name,
+        type: item.type,
+        chunkSize: item.chunkSize,
+        chunkOverlap: item.chunkOverlap,
+        preserveSentenceBoundary: item.preserveSentenceBoundary,
+        separatorsText: item.separators.join("\n"),
+        maxSentenceMerge: item.maxSentenceMerge,
+        versionLabel: item.versionLabel,
+      }),
+    ),
+  };
+}
+
+function buildInitialExperimentFormValues(
+  prompt: RagPromptCurrentResponse | undefined,
+): ExperimentFormValues {
+  return {
+    queriesText: "请总结当前文档的核心结论",
+    topK: 5,
+    mode: "retrieve-only",
+    basePromptId: prompt?.id ?? "rag-answer",
+    promptVersionLabel: "draft",
+    systemPrompt: prompt?.systemPrompt ?? "",
+    contextTemplate: prompt?.contextTemplate ?? "检索上下文如下：\n{context}",
+    chunkStrategyDrafts: [
+      {
+        name: "sentence-recursive-v1",
+        type: "recursive",
+        chunkSize: 800,
+        chunkOverlap: 150,
+        preserveSentenceBoundary: true,
+        separatorsText: "。\n！\n？\n；\n\n",
+        versionLabel: "draft",
+      },
+    ],
+  };
+}
+
+function buildInitialChunkFormValues(): ChunkFormValues {
+  return {
+    limit: 20,
+    offset: 0,
+  };
 }
 
 export function DebugWorkbenchPage() {
-  const documentListQuery = useDocumentList();
-  const [knowledgeBaseId, setKnowledgeBaseId] = useState("default-kb");
-  const [query, setQuery] = useState("为什么这次没有命中预期文档？");
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
-  const [systemTemplate, setSystemTemplate] = useState(DEFAULT_SYSTEM_PROMPT);
-  const [contextJoiner, setContextJoiner] =
-    useState<PromptChunkTunePayload["prompt"]["contextJoiner"]>("double_newline");
-  const [includeCitationHint, setIncludeCitationHint] = useState(true);
-  const [maxContextChunks, setMaxContextChunks] = useState(5);
-  const [chunkSize, setChunkSize] = useState(800);
-  const [chunkOverlap, setChunkOverlap] = useState(120);
-  const [chunkBoundary, setChunkBoundary] =
-    useState<PromptChunkTunePayload["chunk"]["boundary"]>("hybrid");
-  const [keepTitlePrefix, setKeepTitlePrefix] = useState(true);
-  const [jsonSearchText, setJsonSearchText] = useState("");
-  const [jsonCollapsed, setJsonCollapsed] = useState<number>(2);
-  const [snapshots, setSnapshots] = useState<DebugSnapshot[]>([]);
-  const [compareLeftId, setCompareLeftId] = useState("");
-  const [compareRightId, setCompareRightId] = useState("");
-  const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [experimentForm] = Form.useForm<ExperimentFormValues>();
+  const [chunkForm] = Form.useForm<ChunkFormValues>();
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string>();
+  const [chunkDebugResult, setChunkDebugResult] = useState<ChunksDebugResponse | null>(null);
+  const [lastExperimentResult, setLastExperimentResult] =
+    useState<DebugExperimentRunResult | null>(null);
+  const [runsLimit, setRunsLimit] = useState(20);
+  const currentKnowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
+  const previousKnowledgeBaseIdRef = useRef<string>("");
 
-  const readyDocuments = useMemo(() => {
-    const items = documentListQuery.data ?? [];
-    return items.filter((item) => toDocumentDisplayStatus(item.status) === "ready");
-  }, [documentListQuery.data]);
+  const knowledgeBaseListQuery = useKnowledgeBaseList();
 
-  const documentOptions = useMemo(
+  const currentPromptQuery = useQuery<RagPromptCurrentResponse, Error>({
+    queryKey: ["debug", "prompt", "current"],
+    queryFn: getCurrentPrompt,
+  });
+
+  const experimentsQuery = useQuery({
+    queryKey: ["debug", "experiments", currentKnowledgeBaseId],
+    queryFn: () =>
+      getDebugExperiments({
+        knowledgeBaseId: currentKnowledgeBaseId,
+        limit: 30,
+        offset: 0,
+      }),
+    enabled: currentKnowledgeBaseId.length > 0,
+  });
+
+  const ragRunsQuery = useQuery<RagRunListResponse, Error>({
+    queryKey: ["debug", "runs", currentKnowledgeBaseId, runsLimit],
+    queryFn: () =>
+      getRagRuns({
+        knowledgeBaseId: currentKnowledgeBaseId,
+        limit: runsLimit,
+        offset: 0,
+      }),
+    enabled: currentKnowledgeBaseId.length > 0,
+  });
+
+  const createExperimentMutation = useMutation({
+    mutationFn: createDebugExperiment,
+    onSuccess: (record) => {
+      setSelectedExperimentId(record.id);
+      experimentForm.setFieldsValue(mapExperimentToForm(record));
+      void experimentsQuery.refetch();
+      message.success("实验草稿已创建。");
+    },
+    onError: (error: Error) => {
+      message.error(parseErrorMessage(error));
+    },
+  });
+
+  const updateExperimentMutation = useMutation({
+    mutationFn: (input: { experimentId: string; payload: DebugExperimentUpdateRequest }) =>
+      updateDebugExperiment(input.experimentId, input.payload),
+    onSuccess: (record) => {
+      experimentForm.setFieldsValue(mapExperimentToForm(record));
+      void experimentsQuery.refetch();
+      message.success("实验草稿已更新。");
+    },
+    onError: (error: Error) => {
+      message.error(parseErrorMessage(error));
+    },
+  });
+
+  const runExperimentMutation = useMutation({
+    mutationFn: runDebugExperiment,
+    onSuccess: (result) => {
+      setLastExperimentResult(result);
+      void experimentsQuery.refetch();
+      void ragRunsQuery.refetch();
+      message.success("实验运行完成。");
+    },
+    onError: (error: Error) => {
+      message.error(parseErrorMessage(error));
+    },
+  });
+
+  const publishExperimentMutation = useMutation({
+    mutationFn: (input: { experimentId: string; strategyName?: string }) =>
+      publishDebugExperiment(input.experimentId, {
+        strategyName: input.strategyName,
+      }),
+    onSuccess: (result) => {
+      void experimentsQuery.refetch();
+      message.success(`策略 ${result.publishedStrategyName} 已发布到生产 chunks。`);
+    },
+    onError: (error: Error) => {
+      message.error(parseErrorMessage(error));
+    },
+  });
+
+  const chunksDebugMutation = useMutation<
+    ChunksDebugResponse,
+    Error,
+    ChunksDebugQuery
+  >({
+    mutationFn: getChunksDebug,
+    onSuccess: (response) => {
+      setChunkDebugResult(response);
+      message.success("Chunks 调试结果已更新。");
+    },
+    onError: (error) => {
+      message.error(parseErrorMessage(error));
+    },
+  });
+
+  const selectedExperiment = useMemo(
+    (): DebugExperimentRecord | undefined =>
+      experimentsQuery.data?.items.find((item) => item.id === selectedExperimentId),
+    [experimentsQuery.data?.items, selectedExperimentId],
+  );
+
+  const strategyOptions = useMemo(
     () =>
-      readyDocuments.map((item) => ({
-        label: item.filename,
-        value: item.id,
+      (selectedExperiment?.chunkStrategyDrafts ?? []).map((item) => ({
+        label: item.name,
+        value: item.name,
       })),
-    [readyDocuments],
+    [selectedExperiment],
   );
 
-  const tunePayload: PromptChunkTunePayload = useMemo(
-    () => ({
-      knowledgeBaseId: knowledgeBaseId.trim(),
-      query: query.trim(),
-      prompt: {
-        systemTemplate: systemTemplate.trim(),
-        contextJoiner,
-        includeCitationHint,
-        maxContextChunks,
-      },
-      chunk: {
-        size: chunkSize,
-        overlap: chunkOverlap,
-        boundary: chunkBoundary,
-        keepTitlePrefix,
-      },
-      documentScope: selectedDocumentIds,
-    }),
-    [
-      chunkBoundary,
-      chunkOverlap,
-      chunkSize,
-      contextJoiner,
-      includeCitationHint,
-      knowledgeBaseId,
-      maxContextChunks,
-      query,
-      selectedDocumentIds,
-      systemTemplate,
-      keepTitlePrefix,
-    ],
-  );
+  useEffect(() => {
+    const previousKnowledgeBaseId = previousKnowledgeBaseIdRef.current;
+    previousKnowledgeBaseIdRef.current = currentKnowledgeBaseId;
 
-  const totalLatency = useMemo(
-    () => STAGE_METRICS.reduce((sum, item) => sum + item.latencyMs, 0),
-    [],
-  );
-  const maxLatency = useMemo(
-    () => Math.max(...STAGE_METRICS.map((item) => item.latencyMs)),
-    [],
-  );
-  const promptPreview = useMemo(
-    () => buildPromptPreview(systemTemplate, contextJoiner, query),
-    [contextJoiner, query, systemTemplate],
-  );
-  const payloadPreviewText = useMemo(
-    () => JSON.stringify(tunePayload, null, 2),
-    [tunePayload],
-  );
-
-  const searchMatches = useMemo(() => {
-    const search = normalizeForMatch(jsonSearchText);
-    if (!search) {
-      return 0;
-    }
-    return normalizeForMatch(payloadPreviewText).includes(search) ? 1 : 0;
-  }, [jsonSearchText, payloadPreviewText]);
-
-  const overlapRatio = Math.round((chunkOverlap / Math.max(chunkSize, 1)) * 100);
-
-  const snapshotOptions = useMemo(
-    () =>
-      snapshots.map((item) => ({
-        label: `${item.label} (${item.createdAt})`,
-        value: item.id,
-      })),
-    [snapshots],
-  );
-
-  const compareLeftSnapshot = useMemo(
-    () => snapshots.find((item) => item.id === compareLeftId),
-    [compareLeftId, snapshots],
-  );
-  const compareRightSnapshot = useMemo(
-    () => snapshots.find((item) => item.id === compareRightId),
-    [compareRightId, snapshots],
-  );
-
-  const snapshotDiffRows = useMemo<SnapshotDiffRow[]>(() => {
-    if (!compareLeftSnapshot || !compareRightSnapshot) {
-      return [];
+    if (previousKnowledgeBaseId === currentKnowledgeBaseId) {
+      return;
     }
 
-    const rows = [
-      {
-        key: "chunk-size",
-        field: "chunk.size",
-        left: String(compareLeftSnapshot.payload.chunk.size),
-        right: String(compareRightSnapshot.payload.chunk.size),
-      },
-      {
-        key: "chunk-overlap",
-        field: "chunk.overlap",
-        left: String(compareLeftSnapshot.payload.chunk.overlap),
-        right: String(compareRightSnapshot.payload.chunk.overlap),
-      },
-      {
-        key: "chunk-boundary",
-        field: "chunk.boundary",
-        left: compareLeftSnapshot.payload.chunk.boundary,
-        right: compareRightSnapshot.payload.chunk.boundary,
-      },
-      {
-        key: "prompt-max-context",
-        field: "prompt.maxContextChunks",
-        left: String(compareLeftSnapshot.payload.prompt.maxContextChunks),
-        right: String(compareRightSnapshot.payload.prompt.maxContextChunks),
-      },
-      {
-        key: "prompt-joiner",
-        field: "prompt.contextJoiner",
-        left: compareLeftSnapshot.payload.prompt.contextJoiner,
-        right: compareRightSnapshot.payload.prompt.contextJoiner,
-      },
-    ];
+    setSelectedExperimentId(undefined);
+    setChunkDebugResult(null);
+    setLastExperimentResult(null);
+    experimentForm.resetFields();
+    experimentForm.setFieldsValue(
+      buildInitialExperimentFormValues(currentPromptQuery.data),
+    );
+    chunkForm.resetFields();
+    chunkForm.setFieldsValue(buildInitialChunkFormValues());
+  }, [chunkForm, currentKnowledgeBaseId, currentPromptQuery.data, experimentForm]);
 
-    return rows.map((row) => ({
-      ...row,
-      status:
-        normalizeForMatch(row.left) === normalizeForMatch(row.right)
-          ? "same"
-          : "changed",
-    }));
-  }, [compareLeftSnapshot, compareRightSnapshot]);
-
-  const handleReset = () => {
-    setKnowledgeBaseId("default-kb");
-    setQuery("为什么这次没有命中预期文档？");
-    setSelectedDocumentIds([]);
-    setSystemTemplate(DEFAULT_SYSTEM_PROMPT);
-    setContextJoiner("double_newline");
-    setIncludeCitationHint(true);
-    setMaxContextChunks(5);
-    setChunkSize(800);
-    setChunkOverlap(120);
-    setChunkBoundary("hybrid");
-    setKeepTitlePrefix(true);
+  const handleCreateExperiment = async (): Promise<void> => {
+    if (currentKnowledgeBaseId.length === 0) {
+      message.warning("请先选择知识库。");
+      return;
+    }
+    const values = await experimentForm.validateFields();
+    await createExperimentMutation.mutateAsync(
+      buildExperimentPayload(values, currentKnowledgeBaseId),
+    );
   };
 
-  const handleSaveSnapshot = () => {
-    const nextId = `${Date.now()}`;
-    const createdAt = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    const nextSnapshot: DebugSnapshot = {
-      id: nextId,
-      label: formatSnapshotLabel(snapshots.length),
-      createdAt,
-      payload: tunePayload,
-    };
-
-    const nextSnapshots = [...snapshots, nextSnapshot].slice(-8);
-    setSnapshots(nextSnapshots);
-    if (!compareLeftId) {
-      setCompareLeftId(nextId);
-    } else if (!compareRightId || compareRightId === compareLeftId) {
-      setCompareRightId(nextId);
-    } else {
-      setCompareRightId(nextId);
+  const handleUpdateExperiment = async (): Promise<void> => {
+    if (!selectedExperimentId) {
+      message.warning("请先从右侧列表选择一个实验，或先创建实验。");
+      return;
     }
+    if (!selectedExperiment) {
+      message.warning("当前实验不存在或不属于已选知识库，请重新选择。");
+      return;
+    }
+
+    const values = await experimentForm.validateFields();
+    await updateExperimentMutation.mutateAsync({
+      experimentId: selectedExperimentId,
+      payload: {
+        ...buildExperimentPayload(values, selectedExperiment.knowledgeBaseId),
+        knowledgeBaseId: selectedExperiment.knowledgeBaseId,
+      },
+    });
+  };
+
+  const handleRunExperiment = async (): Promise<void> => {
+    if (!selectedExperimentId) {
+      message.warning("请先创建或选择实验。");
+      return;
+    }
+
+    await runExperimentMutation.mutateAsync(selectedExperimentId);
+  };
+
+  const handlePublishExperiment = async (): Promise<void> => {
+    if (!selectedExperimentId) {
+      message.warning("请先创建或选择实验。");
+      return;
+    }
+
+    const values = experimentForm.getFieldsValue();
+    const firstStrategyName = values.chunkStrategyDrafts?.[0]?.name?.trim();
+    await publishExperimentMutation.mutateAsync({
+      experimentId: selectedExperimentId,
+      strategyName: firstStrategyName.length > 0 ? firstStrategyName : undefined,
+    });
+  };
+
+  const handleChunkSearch = async (): Promise<void> => {
+    const values = await chunkForm.validateFields();
+    await chunksDebugMutation.mutateAsync({
+      knowledgeBaseId: currentKnowledgeBaseId,
+      experimentId: values.experimentId,
+      strategyName: values.strategyName?.trim() || undefined,
+      keyword: values.keyword?.trim() || undefined,
+      query: values.query?.trim() || undefined,
+      page: values.page,
+      limit: values.limit,
+      offset: values.offset,
+    });
   };
 
   return (
     <div className={styles.pageStack}>
       <header className={styles.pageHeader}>
-        <div>
-          <Typography.Title level={4} className={styles.pageTitle}>
-            调试工作台
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            以知识库为单位调试 Prompt 与 Chunk 策略，观察参数变化对性能的影响。
-          </Typography.Text>
-        </div>
-        <Space size={8} wrap>
-          <Button icon={<ReloadOutlined />} onClick={handleReset}>
-            重置参数
-          </Button>
-          <Button icon={<SaveOutlined />} onClick={handleSaveSnapshot}>
-            保存当前快照
-          </Button>
-          <Button type="primary" icon={<PlayCircleOutlined />}>
-            执行一次调试
-          </Button>
-        </Space>
+        <Typography.Title level={4} className={styles.pageTitle}>
+          联动式 RAG 调试实验
+        </Typography.Title>
+        <Typography.Text type="secondary">
+          调试入口已切换为实验模型：同一次实验可联动调整 Prompt、Chunk 策略、TopK 与查询集，运行结果统一落库。
+        </Typography.Text>
       </header>
 
-      <Row gutter={[16, 16]} className={styles.layoutRow}>
-        <Col xs={24} xl={9} className={styles.stretchCol}>
-          <PageSectionCard title="知识库调试上下文">
-            <Space direction="vertical" size={12} className={styles.fullWidth}>
-              <label className={styles.field}>
-                <Typography.Text type="secondary">Knowledge Base ID</Typography.Text>
-                <Input
-                  value={knowledgeBaseId}
-                  onChange={(event) => setKnowledgeBaseId(event.target.value)}
-                  placeholder="输入知识库 ID"
-                />
-              </label>
-              <label className={styles.field}>
-                <Typography.Text type="secondary">调试 Query</Typography.Text>
-                <Input.TextArea
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  autoSize={{ minRows: 4, maxRows: 8 }}
-                  placeholder="输入要回放的用户问题"
-                />
-              </label>
-              <label className={styles.field}>
-                <Typography.Text type="secondary">文档范围（可选）</Typography.Text>
-                <Select
-                  mode="multiple"
-                  allowClear
-                  placeholder={
-                    documentOptions.length
-                      ? "选择文档范围，不选则默认使用知识库全量"
-                      : "暂无 ready 文档"
-                  }
-                  options={documentOptions}
-                  value={selectedDocumentIds}
-                  onChange={setSelectedDocumentIds}
-                />
-              </label>
-              <Alert
-                type="info"
-                showIcon
-                message={`当前可问答文档 ${readyDocuments.length} 个`}
-                description="调试页按知识库维度工作；如果后端暂未支持 documentScope，会自动忽略此字段。"
-              />
-            </Space>
-          </PageSectionCard>
-        </Col>
+      {currentPromptQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="读取当前 Prompt 失败"
+          description={parseErrorMessage(currentPromptQuery.error)}
+        />
+      ) : null}
 
-        <Col xs={24} xl={15} className={styles.stretchCol}>
-          <PageSectionCard title="调参面板（Prompt + Chunk）">
-            <div className={styles.tuneGrid}>
-              <section className={styles.tuneSection}>
-                <Typography.Text strong className={styles.sectionTitle}>
-                  Prompt 策略
-                </Typography.Text>
-
-                <div className={styles.editorHeader}>
-                  <Typography.Text type="secondary">System Template</Typography.Text>
-                  <Button
-                    size="small"
-                    icon={<ExpandOutlined />}
-                    onClick={() => setPromptEditorOpen(true)}
-                  >
-                    全屏编辑
-                  </Button>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={15}>
+          <PageSectionCard title="实验配置">
+            <Space direction="vertical" className={styles.fullWidth} size={12}>
+              <div className={styles.resultBox}>
+                <Typography.Text strong>当前正式 Prompt</Typography.Text>
+                <div className={styles.tagRow}>
+                  <Tag color="geekblue">
+                    知识库 {knowledgeBaseListQuery.data?.find((item) => item.id === currentKnowledgeBaseId)?.name ?? "未选择"}
+                  </Tag>
+                  <Tag color="blue">
+                    {currentPromptQuery.data?.versionedId ?? "加载中"}
+                  </Tag>
+                  <Tag>ID: {currentPromptQuery.data?.id ?? "-"}</Tag>
+                  <Tag>Version: {currentPromptQuery.data?.version ?? "-"}</Tag>
                 </div>
-                <Input.TextArea
-                  value={systemTemplate}
-                  onChange={(event) => setSystemTemplate(event.target.value)}
-                  autoSize={{ minRows: 8, maxRows: 16 }}
-                />
-
-                <label className={styles.field}>
-                  <Typography.Text type="secondary">Context 拼接方式</Typography.Text>
-                  <Select
-                    value={contextJoiner}
-                    onChange={(value) => setContextJoiner(value)}
-                    options={[
-                      { label: "双换行", value: "double_newline" },
-                      { label: "XML Block", value: "xml_block" },
-                      { label: "JSON Block", value: "json_block" },
-                    ]}
-                  />
-                </label>
-
-                <div className={styles.toggleRow}>
-                  <Typography.Text type="secondary">追加 citation 输出提示</Typography.Text>
-                  <Switch
-                    checked={includeCitationHint}
-                    onChange={setIncludeCitationHint}
-                  />
-                </div>
-
-                <div className={styles.numberRow}>
-                  <Typography.Text type="secondary">最大上下文块数</Typography.Text>
-                  <InputNumber
-                    min={1}
-                    max={20}
-                    value={maxContextChunks}
-                    onChange={(value) => {
-                      if (typeof value === "number") {
-                        setMaxContextChunks(value);
-                      }
-                    }}
-                  />
-                </div>
-              </section>
-
-              <section className={styles.tuneSection}>
-                <Typography.Text strong className={styles.sectionTitle}>
-                  Chunk 策略
-                </Typography.Text>
-
-                <div className={styles.numberRow}>
-                  <Typography.Text type="secondary">Chunk Size</Typography.Text>
-                  <InputNumber
-                    min={128}
-                    max={4096}
-                    step={64}
-                    value={chunkSize}
-                    onChange={(value) => {
-                      if (typeof value === "number") {
-                        setChunkSize(value);
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.numberRow}>
-                  <Typography.Text type="secondary">Chunk Overlap</Typography.Text>
-                  <InputNumber
-                    min={0}
-                    max={2048}
-                    step={32}
-                    value={chunkOverlap}
-                    onChange={(value) => {
-                      if (typeof value === "number") {
-                        setChunkOverlap(value);
-                      }
-                    }}
-                  />
-                </div>
-
-                <label className={styles.field}>
-                  <Typography.Text type="secondary">边界策略</Typography.Text>
-                  <Select
-                    value={chunkBoundary}
-                    onChange={(value) => setChunkBoundary(value)}
-                    options={[
-                      { label: "段落优先", value: "paragraph" },
-                      { label: "句子优先", value: "sentence" },
-                      { label: "混合策略", value: "hybrid" },
-                    ]}
-                  />
-                </label>
-
-                <div className={styles.toggleRow}>
-                  <Typography.Text type="secondary">保留标题前缀</Typography.Text>
-                  <Switch checked={keepTitlePrefix} onChange={setKeepTitlePrefix} />
-                </div>
-
-                <Alert
-                  type={overlapRatio < 10 || overlapRatio > 45 ? "warning" : "success"}
-                  showIcon
-                  message={`Overlap 占比 ${overlapRatio}%`}
-                  description={
-                    overlapRatio < 10
-                      ? "可能导致语义跨块断裂。"
-                      : overlapRatio > 45
-                        ? "可能造成冗余与检索噪声。"
-                        : "处于推荐区间（10%~45%）。"
-                  }
-                />
-              </section>
-            </div>
-          </PageSectionCard>
-        </Col>
-
-        <Col xs={24} xl={12} className={styles.stretchCol}>
-          <PageSectionCard title="Prompt Inspector" extra={<Tag color="blue">调试结果</Tag>}>
-            <div className={`${styles.resultSurface} ${styles.resultPrompt}`}>
-              <Space direction="vertical" size={10} className={styles.fullWidth}>
-                <div className={styles.promptLegend}>
-                  <Tag color="blue">Instructions</Tag>
-                  <Tag color="gold">Grounding Placeholder</Tag>
-                  <Tag color="purple">User Query</Tag>
-                </div>
-                <pre className={styles.promptPreview}>{promptPreview}</pre>
-                <Typography.Text type="secondary">
-                  当前是前端拼接预览，后续可与后端返回的最终 prompt 做 diff 对比。
-                </Typography.Text>
-              </Space>
-            </div>
-          </PageSectionCard>
-        </Col>
-
-        <Col xs={24} xl={12} className={styles.stretchCol}>
-          <PageSectionCard title="性能拆解（Latency Breakdown）" extra={<Tag color="processing">Total {totalLatency} ms</Tag>}>
-            <div className={`${styles.resultSurface} ${styles.resultLatency}`}>
-              <Space direction="vertical" size={14} className={styles.fullWidth}>
-                {STAGE_METRICS.map((stage) => {
-                  const ratio = (stage.latencyMs / maxLatency) * 100;
-                  return (
-                    <div key={stage.key} className={styles.timelineRow}>
-                      <Typography.Text className={styles.timelineName}>
-                        {stage.name}
-                      </Typography.Text>
-                      <div className={styles.timelineBarWrap}>
-                        <div
-                          className={styles.timelineBar}
-                          style={{ width: `${ratio}%`, backgroundColor: stage.color }}
-                        />
-                      </div>
-                      <Typography.Text strong>{stage.latencyMs} ms</Typography.Text>
-                    </div>
-                  );
-                })}
-
-                <Table<StageMetric>
-                  rowKey="key"
-                  size="small"
-                  pagination={false}
-                  columns={LATENCY_COLUMNS}
-                  dataSource={STAGE_METRICS}
-                />
-              </Space>
-            </div>
-          </PageSectionCard>
-        </Col>
-
-        <Col xs={24} xl={12} className={styles.stretchCol}>
-          <PageSectionCard title="Chunk 策略预览">
-            <Space direction="vertical" size={10} className={styles.fullWidth}>
-              <div className={styles.chunkMetricRow}>
-                <Tag color="processing">Size {chunkSize}</Tag>
-                <Tag color="processing">Overlap {chunkOverlap}</Tag>
-                <Tag>{chunkBoundary}</Tag>
-              </div>
-              <div className={styles.chunkPreviewBlock}>
-                <Typography.Text strong>Chunk #41</Typography.Text>
-                <Typography.Paragraph className={styles.chunkPreviewText}>
-                  ...示例正文片段 A（长度约 {chunkSize}）...
-                </Typography.Paragraph>
-              </div>
-              <div className={styles.chunkPreviewBlock}>
-                <Typography.Text strong>Chunk #42</Typography.Text>
-                <Typography.Paragraph className={styles.chunkPreviewText}>
-                  ...示例正文片段 B，前 {chunkOverlap} 字与上一个块重叠...
-                </Typography.Paragraph>
-              </div>
-              <Alert
-                type="info"
-                showIcon
-                message="该区块预留给真实 chunk 邻近预览与语义断裂告警。"
-              />
-            </Space>
-          </PageSectionCard>
-        </Col>
-
-        <Col xs={24} xl={12} className={styles.stretchCol}>
-          <PageSectionCard title="调参请求 JSON">
-            <Space direction="vertical" size={10} className={styles.fullWidth}>
-              <div className={styles.jsonToolbar}>
-                <Input
-                  placeholder="搜索 JSON 内容"
-                  value={jsonSearchText}
-                  onChange={(event) => setJsonSearchText(event.target.value)}
-                />
-                <InputNumber
-                  min={1}
-                  max={6}
-                  value={jsonCollapsed}
-                  onChange={(value) => {
-                    if (typeof value === "number") {
-                      setJsonCollapsed(value);
-                    }
-                  }}
-                />
-              </div>
-              <Typography.Text type="secondary">
-                {jsonSearchText.trim()
-                  ? searchMatches > 0
-                    ? `已匹配关键词：${jsonSearchText}`
-                    : `未匹配关键词：${jsonSearchText}`
-                  : "支持折叠层级调整（右侧数字）。"}
-              </Typography.Text>
-              <div className={styles.jsonViewerWrap}>
-                <JsonView
-                  value={tunePayload}
-                  collapsed={jsonCollapsed}
-                  displayDataTypes={false}
-                  displayObjectSize={true}
-                  enableClipboard={true}
-                  objectSortKeys={false}
-                />
-              </div>
-              {jsonSearchText.trim() && searchMatches === 0 ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message="未找到匹配项"
-                  description="可以尝试搜索 chunk、prompt、knowledgeBaseId 等关键词。"
-                />
-              ) : null}
-            </Space>
-          </PageSectionCard>
-        </Col>
-
-        <Col xs={24} className={styles.stretchCol}>
-          <PageSectionCard title="快照对比模式">
-            <Space direction="vertical" size={12} className={styles.fullWidth}>
-              <div className={styles.compareToolbar}>
-                <Select
-                  className={styles.compareSelect}
-                  placeholder="选择快照 A"
-                  options={snapshotOptions}
-                  value={compareLeftId || undefined}
-                  onChange={setCompareLeftId}
-                />
-                <Select
-                  className={styles.compareSelect}
-                  placeholder="选择快照 B"
-                  options={snapshotOptions}
-                  value={compareRightId || undefined}
-                  onChange={setCompareRightId}
-                />
               </div>
 
-              {!compareLeftSnapshot || !compareRightSnapshot ? (
+              <Form<ExperimentFormValues>
+                layout="vertical"
+                form={experimentForm}
+                initialValues={buildInitialExperimentFormValues(currentPromptQuery.data)}
+              >
                 <Alert
                   type="info"
                   showIcon
-                  message="先保存至少两个快照，再选择 A/B 做参数对比。"
+                  message="实验范围固定为当前知识库"
+                  description="Prompt 调试、Chunk 调试和联动调试都会默认覆盖当前知识库下全部 ready 文档，不再按单文档选择。"
                 />
-              ) : (
-                <>
-                  <Table<SnapshotDiffRow>
-                    rowKey="key"
-                    size="small"
-                    pagination={false}
-                    columns={SNAPSHOT_DIFF_COLUMNS}
-                    dataSource={snapshotDiffRows}
+
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="TopK"
+                      name="topK"
+                      rules={[{ required: true, message: "请输入 TopK" }]}
+                    >
+                      <InputNumber min={1} max={20} className={styles.numberInput} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="模式" name="mode">
+                      <Select
+                        options={[
+                          { label: "retrieve-only", value: "retrieve-only" },
+                          { label: "full-rag", value: "full-rag" },
+                        ]}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Form.Item
+                  label="Queries（每行一条）"
+                  name="queriesText"
+                  rules={[{ required: true, message: "请输入至少一条 query" }]}
+                >
+                  <Input.TextArea autoSize={{ minRows: 3, maxRows: 8 }} />
+                </Form.Item>
+
+                <Typography.Text strong>Prompt 草稿</Typography.Text>
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="Base Prompt ID"
+                      name="basePromptId"
+                      rules={[{ required: true, message: "请输入 Prompt ID" }]}
+                    >
+                      <Input />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Prompt Version Label" name="promptVersionLabel">
+                      <Input placeholder="draft / v2 / exp-a" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item
+                  label="System Prompt"
+                  name="systemPrompt"
+                  rules={[{ required: true, message: "请输入 system prompt" }]}
+                >
+                  <Input.TextArea autoSize={{ minRows: 6, maxRows: 14 }} />
+                </Form.Item>
+                <Form.Item
+                  label="Context Template"
+                  name="contextTemplate"
+                  rules={[{ required: true, message: "请输入上下文模板" }]}
+                >
+                  <Input.TextArea autoSize={{ minRows: 3, maxRows: 8 }} />
+                </Form.Item>
+
+                <Form.List name="chunkStrategyDrafts">
+                  {(fields, { add, remove }) => (
+                    <Space direction="vertical" className={styles.fullWidth} size={12}>
+                      <div className={styles.sectionBar}>
+                        <Typography.Text strong>Chunk 策略草稿</Typography.Text>
+                        <Button
+                          onClick={() =>
+                            add({
+                              name: `strategy-${fields.length + 1}`,
+                              type: "recursive",
+                              chunkSize: 800,
+                              chunkOverlap: 150,
+                              preserveSentenceBoundary: true,
+                            })
+                          }
+                        >
+                          新增策略
+                        </Button>
+                      </div>
+                      {fields.map((field) => (
+                        <div key={field.key} className={styles.strategyCard}>
+                          <Row gutter={12}>
+                            <Col span={8}>
+                              <Form.Item
+                                {...field}
+                                label="名称"
+                                name={[field.name, "name"]}
+                                rules={[{ required: true, message: "请输入策略名称" }]}
+                              >
+                                <Input />
+                              </Form.Item>
+                            </Col>
+                            <Col span={6}>
+                              <Form.Item
+                                {...field}
+                                label="类型"
+                                name={[field.name, "type"]}
+                                rules={[{ required: true, message: "请选择类型" }]}
+                              >
+                                <Select
+                                  options={[
+                                    { label: "recursive", value: "recursive" },
+                                    { label: "markdown", value: "markdown" },
+                                    { label: "token", value: "token" },
+                                  ]}
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col span={5}>
+                              <Form.Item
+                                {...field}
+                                label="Chunk Size"
+                                name={[field.name, "chunkSize"]}
+                                rules={[{ required: true, message: "请输入 chunk size" }]}
+                              >
+                                <InputNumber min={50} max={8000} className={styles.numberInput} />
+                              </Form.Item>
+                            </Col>
+                            <Col span={5}>
+                              <Form.Item
+                                {...field}
+                                label="Overlap"
+                                name={[field.name, "chunkOverlap"]}
+                                rules={[{ required: true, message: "请输入 overlap" }]}
+                              >
+                                <InputNumber min={0} max={4000} className={styles.numberInput} />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+
+                          <Row gutter={12}>
+                            <Col span={8}>
+                              <Form.Item
+                                {...field}
+                                label="Version Label"
+                                name={[field.name, "versionLabel"]}
+                              >
+                                <Input placeholder="draft / v1" />
+                              </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                              <Form.Item
+                                {...field}
+                                label="Max Sentence Merge"
+                                name={[field.name, "maxSentenceMerge"]}
+                              >
+                                <InputNumber min={1} max={100} className={styles.numberInput} />
+                              </Form.Item>
+                            </Col>
+                            <Col span={8}>
+                              <Form.Item
+                                {...field}
+                                label="句子边界优先"
+                                name={[field.name, "preserveSentenceBoundary"]}
+                                valuePropName="checked"
+                              >
+                                <Switch />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+
+                          <Form.Item
+                            {...field}
+                            label="Separators（逗号或换行分隔，可选）"
+                            name={[field.name, "separatorsText"]}
+                          >
+                            <Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} />
+                          </Form.Item>
+
+                          {fields.length > 1 ? (
+                            <Button danger onClick={() => remove(field.name)}>
+                              删除策略
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </Space>
+                  )}
+                </Form.List>
+              </Form>
+
+              <Space wrap>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    void handleCreateExperiment();
+                  }}
+                  loading={createExperimentMutation.isPending}
+                >
+                  创建实验
+                </Button>
+                <Button
+                  onClick={() => {
+                    void handleUpdateExperiment();
+                  }}
+                  loading={updateExperimentMutation.isPending}
+                >
+                  更新实验
+                </Button>
+                <Button
+                  onClick={() => {
+                    void handleRunExperiment();
+                  }}
+                  loading={runExperimentMutation.isPending}
+                >
+                  运行实验
+                </Button>
+                <Popconfirm
+                  title="确认发布当前实验的第一条策略到正式 chunks？"
+                  onConfirm={() => handlePublishExperiment()}
+                >
+                  <Button loading={publishExperimentMutation.isPending}>
+                    发布到生产
+                  </Button>
+                </Popconfirm>
+              </Space>
+            </Space>
+          </PageSectionCard>
+        </Col>
+
+        <Col xs={24} xl={9}>
+          <PageSectionCard title="实验列表">
+            {experimentsQuery.isError ? (
+              <Alert
+                type="error"
+                showIcon
+                message="读取实验列表失败"
+                description={parseErrorMessage(experimentsQuery.error)}
+              />
+            ) : (
+              <Table<DebugExperimentRecord>
+                rowKey="id"
+                size="small"
+                columns={EXPERIMENT_COLUMNS}
+                dataSource={experimentsQuery.data?.items ?? []}
+                loading={experimentsQuery.isLoading || experimentsQuery.isFetching}
+                pagination={false}
+                rowSelection={{
+                  type: "radio",
+                  selectedRowKeys: selectedExperimentId ? [selectedExperimentId] : [],
+                  onChange: (selectedKeys, selectedRows) => {
+                    const nextId = typeof selectedKeys[0] === "string" ? selectedKeys[0] : undefined;
+                    setSelectedExperimentId(nextId);
+                    const nextRecord = selectedRows[0];
+                    if (nextRecord) {
+                      experimentForm.setFieldsValue(mapExperimentToForm(nextRecord));
+                      chunkForm.setFieldValue("experimentId", nextRecord.id);
+                    }
+                  },
+                }}
+              />
+            )}
+          </PageSectionCard>
+        </Col>
+
+        <Col xs={24} xl={13}>
+          <PageSectionCard title="实验运行结果">
+            {!lastExperimentResult ? (
+              <Alert type="info" showIcon message="尚未运行实验" />
+            ) : (
+              <Space direction="vertical" className={styles.fullWidth} size={12}>
+                <div className={styles.tagRow}>
+                  <Tag color="blue">Experiment {lastExperimentResult.experimentId}</Tag>
+                  <Tag>Status {lastExperimentResult.status}</Tag>
+                  <Tag>Mode {lastExperimentResult.mode}</Tag>
+                  <Tag>TopK {lastExperimentResult.topK}</Tag>
+                </div>
+                <pre className={styles.jsonCode}>
+                  {JSON.stringify(lastExperimentResult, null, 2)}
+                </pre>
+              </Space>
+            )}
+          </PageSectionCard>
+        </Col>
+
+        <Col xs={24} xl={11}>
+          <PageSectionCard title="Chunks 浏览">
+            <Space direction="vertical" className={styles.fullWidth} size={12}>
+              <Form<ChunkFormValues>
+                layout="vertical"
+                form={chunkForm}
+                initialValues={buildInitialChunkFormValues()}
+              >
+                <Form.Item label="实验（可选）" name="experimentId">
+                  <Select
+                    allowClear
+                    options={(experimentsQuery.data?.items ?? []).map((item) => ({
+                      label: `${item.status} · ${item.chunkNamespace}`,
+                      value: item.id,
+                    }))}
+                    placeholder="不选则浏览正式 chunks"
+                    onChange={(value: string | undefined) => {
+                      const matched = experimentsQuery.data?.items.find((item) => item.id === value);
+                      chunkForm.setFieldValue("strategyName", matched?.chunkStrategyDrafts[0]?.name);
+                    }}
                   />
-                  <div className={styles.compareJsonGrid}>
-                    <section className={styles.compareJsonBlock}>
-                      <Typography.Text strong>{compareLeftSnapshot.label}</Typography.Text>
-                      <Typography.Text type="secondary">
-                        {compareLeftSnapshot.createdAt}
-                      </Typography.Text>
-                      <div className={styles.jsonViewerWrap}>
-                        <JsonView
-                          value={compareLeftSnapshot.payload}
-                          collapsed={2}
-                          displayDataTypes={false}
-                          enableClipboard={true}
-                        />
-                      </div>
-                    </section>
-                    <section className={styles.compareJsonBlock}>
-                      <Typography.Text strong>{compareRightSnapshot.label}</Typography.Text>
-                      <Typography.Text type="secondary">
-                        {compareRightSnapshot.createdAt}
-                      </Typography.Text>
-                      <div className={styles.jsonViewerWrap}>
-                        <JsonView
-                          value={compareRightSnapshot.payload}
-                          collapsed={2}
-                          displayDataTypes={false}
-                          enableClipboard={true}
-                        />
-                      </div>
-                    </section>
+                </Form.Item>
+                <Form.Item label="策略名（实验模式可选）" name="strategyName">
+                  <Select allowClear options={strategyOptions} placeholder="筛选指定策略" />
+                </Form.Item>
+                <Form.Item label="关键词（可选）" name="keyword">
+                  <Input placeholder="关键字过滤 content" />
+                </Form.Item>
+                <Form.Item label="语义 Query（可选）" name="query">
+                  <Input placeholder="用于 score 计算" />
+                </Form.Item>
+                <Row gutter={12}>
+                  <Col span={8}>
+                    <Form.Item label="Page" name="page">
+                      <InputNumber min={1} className={styles.numberInput} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item label="Limit" name="limit">
+                      <InputNumber min={1} max={100} className={styles.numberInput} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item label="Offset" name="offset">
+                      <InputNumber min={0} max={1000} className={styles.numberInput} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </Form>
+              <Button
+                type="primary"
+                onClick={() => {
+                  void handleChunkSearch();
+                }}
+                loading={chunksDebugMutation.isPending}
+              >
+                查询 Chunks
+              </Button>
+
+              {!chunkDebugResult ? (
+                <Alert type="info" showIcon message="尚未查询 chunk 数据" />
+              ) : (
+                <Space direction="vertical" className={styles.fullWidth} size={12}>
+                  <div className={styles.tagRow}>
+                    <Tag color="blue">Total {chunkDebugResult.total}</Tag>
+                    <Tag>Limit {chunkDebugResult.limit}</Tag>
+                    <Tag>Offset {chunkDebugResult.offset}</Tag>
                   </div>
-                </>
+                  <Table<ChunksDebugItem>
+                    rowKey="chunkId"
+                    size="small"
+                    columns={CHUNK_COLUMNS}
+                    dataSource={chunkDebugResult.items}
+                    pagination={false}
+                  />
+                </Space>
               )}
             </Space>
           </PageSectionCard>
         </Col>
-      </Row>
 
-      <Modal
-        title="全屏编辑 Prompt Template"
-        open={promptEditorOpen}
-        onCancel={() => setPromptEditorOpen(false)}
-        onOk={() => setPromptEditorOpen(false)}
-        width={980}
-        okText="完成"
-        cancelText="取消"
-      >
-        <Input.TextArea
-          value={systemTemplate}
-          onChange={(event) => setSystemTemplate(event.target.value)}
-          autoSize={{ minRows: 22, maxRows: 28 }}
-        />
-      </Modal>
+        <Col xs={24}>
+          <PageSectionCard
+            title="RAG Debug Runs"
+            extra={
+              <Space>
+                <Typography.Text type="secondary">Limit</Typography.Text>
+                <InputNumber
+                  min={1}
+                  max={100}
+                  value={runsLimit}
+                  onChange={(value) => {
+                    if (typeof value === "number") {
+                      setRunsLimit(value);
+                    }
+                  }}
+                />
+                <Button onClick={() => void ragRunsQuery.refetch()} loading={ragRunsQuery.isFetching}>
+                  刷新
+                </Button>
+              </Space>
+            }
+          >
+            {ragRunsQuery.isError ? (
+              <Alert
+                type="error"
+                showIcon
+                message="读取调试运行记录失败"
+                description={parseErrorMessage(ragRunsQuery.error)}
+              />
+            ) : (
+              <Table<RagRunRecord>
+                rowKey="runId"
+                columns={RUN_COLUMNS}
+                dataSource={ragRunsQuery.data?.items ?? []}
+                loading={ragRunsQuery.isLoading || ragRunsQuery.isFetching}
+                pagination={false}
+                size="small"
+              />
+            )}
+          </PageSectionCard>
+        </Col>
+      </Row>
     </div>
   );
 }

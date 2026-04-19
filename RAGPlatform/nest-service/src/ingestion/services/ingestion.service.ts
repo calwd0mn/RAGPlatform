@@ -148,6 +148,7 @@ export class IngestionService {
       const chunkPayload = chunksForEmbedding.map(
         (chunkDocument, chunkIndex): Partial<Chunk> => ({
           userId: normalizedUserId,
+          knowledgeBaseId: lockedDocument.knowledgeBaseId,
           documentId: normalizedDocumentId,
           chunkIndex,
           content: chunkDocument.pageContent,

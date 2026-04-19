@@ -8,6 +8,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { MessagesModule } from './messages/messages.module';
 import { DocumentsModule } from './documents/documents.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { RagModule } from './rag/rag.module';
 import { ChunksModule } from './chunks/chunks.module';
 
@@ -33,6 +34,7 @@ const databaseImports = shouldConnectMongo
     ConversationsModule,
     MessagesModule,
     DocumentsModule,
+    KnowledgeBasesModule,
     IngestionModule,
     RagModule,
     ChunksModule,

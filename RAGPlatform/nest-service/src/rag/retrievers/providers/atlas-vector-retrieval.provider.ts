@@ -16,6 +16,7 @@ interface AtlasRetrievedChunkDocument {
   _id?: Types.ObjectId | string;
   userId?: Types.ObjectId | string;
   documentId?: Types.ObjectId | string;
+  chunkIndex?: number;
   content?: string;
   metadata?: ChunkMetadata;
   score?: number;
@@ -25,6 +26,7 @@ interface ValidAtlasRetrievedChunkDocument {
   _id: Types.ObjectId | string;
   userId: Types.ObjectId | string;
   documentId: Types.ObjectId | string;
+  chunkIndex?: number;
   content: string;
   metadata?: ChunkMetadata;
   score: number;
@@ -41,10 +43,12 @@ export class AtlasVectorRetrievalProvider implements RagRetrievalProvider {
 
   async retrieveTopKByUser(
     userId: string,
+    knowledgeBaseId: string,
     queryEmbedding: number[],
     topK: number,
   ): Promise<RetrievedChunk[]> {
     const normalizedUserId = this.toObjectId(userId);
+    const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
     if (queryEmbedding.length === 0) {
       throw new InternalServerErrorException('Query embedding is empty');
     }
@@ -57,6 +61,7 @@ export class AtlasVectorRetrievalProvider implements RagRetrievalProvider {
       topK,
       candidateLimit: config.vectorCandidateLimit,
       userId: normalizedUserId,
+      knowledgeBaseId: normalizedKnowledgeBaseId,
     });
 
     let rows: AtlasRetrievedChunkDocument[];
@@ -87,6 +92,7 @@ export class AtlasVectorRetrievalProvider implements RagRetrievalProvider {
         (row): RetrievedChunk => ({
           chunkId: row._id.toString(),
           documentId: row.documentId.toString(),
+          chunkIndex: row.chunkIndex,
           content: row.content,
           score: row.score,
           metadata: row.metadata ?? {},

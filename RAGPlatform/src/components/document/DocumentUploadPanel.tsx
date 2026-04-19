@@ -6,6 +6,7 @@ import type { UploadFile, UploadProps } from "antd/es/upload/interface";
 import { useState } from "react";
 import { queryKeys } from "../../constants/queryKeys";
 import { useUploadDocument } from "../../hooks/document/useUploadDocument";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
 import styles from "./DocumentUploadPanel.module.css";
 
@@ -16,6 +17,9 @@ export function DocumentUploadPanel() {
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const uploadMutation = useUploadDocument();
+  const knowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
 
   const resolveErrorMessage = (
     error: AxiosError<ApiErrorPayload> | null,
@@ -56,6 +60,10 @@ export function DocumentUploadPanel() {
       message.info("请先选择待上传文件。");
       return;
     }
+    if (knowledgeBaseId.length === 0) {
+      message.warning("请先选择知识库。");
+      return;
+    }
 
     setIsUploading(true);
     let successCount = 0;
@@ -77,7 +85,7 @@ export function DocumentUploadPanel() {
 
     if (successCount > 0) {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.documents.list,
+        queryKey: queryKeys.documents.list(knowledgeBaseId),
       });
     }
 
@@ -123,7 +131,7 @@ export function DocumentUploadPanel() {
           onClick={() => {
             void handleUpload();
           }}
-          disabled={!fileList.length}
+          disabled={!fileList.length || knowledgeBaseId.length === 0}
         >
           开始上传
         </Button>

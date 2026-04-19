@@ -30,6 +30,9 @@ class MessageCitationSchemaClass implements MessageCitation {
 @Schema({ _id: false })
 class MessageTraceSchemaClass implements MessageTrace {
   @Prop()
+  knowledgeBaseId?: string;
+
+  @Prop()
   query?: string;
 
   @Prop()
@@ -46,6 +49,9 @@ class MessageTraceSchemaClass implements MessageTrace {
 
   @Prop()
   retrievalProvider?: string;
+
+  @Prop()
+  promptVersion?: string;
 
   @Prop()
   latencyMs?: number;

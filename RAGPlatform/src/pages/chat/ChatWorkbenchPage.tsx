@@ -18,6 +18,7 @@ import { useDeleteConversation } from "../../hooks/chat/useDeleteConversation";
 import { useMessageList } from "../../hooks/chat/useMessageList";
 import { useUpdateConversation } from "../../hooks/chat/useUpdateConversation";
 import { askRagStream } from "../../services/rag";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import { useCitationWorkspaceStore } from "../../stores/citation-workspace.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage, ConversationItem } from "../../types/chat";
@@ -46,6 +47,9 @@ export function ChatWorkbenchPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
+  const currentKnowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
   const [draft, setDraft] = useState("");
   const [activePanelTab, setActivePanelTab] =
     useState<EvidenceTabKey>("evidence");
@@ -74,20 +78,51 @@ export function ChatWorkbenchPage() {
   const createConversationMutation = useCreateConversation();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
-  const messageListQuery = useMessageList(conversationId);
+  const activeConversationId = conversationId ?? "";
+  const activeConversation = useMemo(
+    () =>
+      (conversationListQuery.data ?? []).find(
+        (item) => item.id === activeConversationId,
+      ),
+    [activeConversationId, conversationListQuery.data],
+  );
+  const messageListQuery = useMessageList(activeConversation?.id);
 
   useEffect(() => {
-    if (conversationId) {
+    if (currentKnowledgeBaseId.length === 0) {
+      navigate("/app/chat", { replace: true });
       return;
+    }
+
+    if (conversationListQuery.isLoading) {
+      return;
+    }
+
+    if (conversationId) {
+      const matchedConversation = conversationListQuery.data?.find(
+        (item) => item.id === conversationId,
+      );
+      if (matchedConversation) {
+        return;
+      }
     }
 
     const firstConversation = conversationListQuery.data?.[0];
     if (firstConversation) {
       navigate(`/app/chat/${firstConversation.id}`, { replace: true });
+      return;
     }
-  }, [conversationId, conversationListQuery.data, navigate]);
+    if (conversationId) {
+      navigate("/app/chat", { replace: true });
+    }
+  }, [
+    conversationId,
+    conversationListQuery.data,
+    conversationListQuery.isLoading,
+    currentKnowledgeBaseId,
+    navigate,
+  ]);
 
-  const activeConversationId = conversationId ?? "";
   const isSubmitting = isStreamingAnswer || createConversationMutation.isPending;
   const persistedMessages = messageListQuery.data ?? [];
   const messages = useMemo(() => {
@@ -208,6 +243,15 @@ export function ChatWorkbenchPage() {
     if (!query || isSubmitting) {
       return;
     }
+    if (currentKnowledgeBaseId.length === 0) {
+      setSubmitErrorMessage("请先选择知识库。");
+      return;
+    }
+    if (activeConversationId && !activeConversation) {
+      setSubmitErrorMessage("当前会话不属于已选知识库，已为你切换回当前知识库。");
+      navigate("/app/chat", { replace: true });
+      return;
+    }
 
     setSubmitErrorMessage("");
     let targetConversationId = activeConversationId;
@@ -272,7 +316,7 @@ export function ChatWorkbenchPage() {
           queryKey: queryKeys.messages.list(result.conversationId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.list,
+          queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
         }),
       ]);
 
@@ -301,7 +345,7 @@ export function ChatWorkbenchPage() {
             queryKey: queryKeys.messages.list(targetConversationId),
           }),
           queryClient.invalidateQueries({
-            queryKey: queryKeys.conversations.list,
+            queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
           }),
         ]);
       }

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { queryKeys } from "../../constants/queryKeys";
 import { sendMessage } from "../../services/messages";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage } from "../../types/chat";
 
@@ -12,6 +13,9 @@ interface SendMessageVariables {
 
 export function useSendMessage() {
   const queryClient = useQueryClient();
+  const knowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
 
   return useMutation<ChatMessage, AxiosError<ApiErrorPayload>, SendMessageVariables>({
     mutationFn: (variables) => sendMessage(variables),
@@ -21,7 +25,7 @@ export function useSendMessage() {
           queryKey: queryKeys.messages.list(variables.conversationId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.list,
+          queryKey: queryKeys.conversations.list(knowledgeBaseId),
         }),
       ]);
     },

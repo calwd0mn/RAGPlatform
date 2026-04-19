@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { queryKeys } from "../../constants/queryKeys";
 import { updateConversation } from "../../services/conversations";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ConversationItem } from "../../types/chat";
 
@@ -22,6 +23,9 @@ function replaceConversation(
 
 export function useUpdateConversation() {
   const queryClient = useQueryClient();
+  const knowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
 
   return useMutation<
     ConversationItem,
@@ -32,11 +36,11 @@ export function useUpdateConversation() {
       updateConversation(variables.conversationId, { title: variables.title }),
     onSuccess: async (updatedConversation) => {
       queryClient.setQueryData<ConversationItem[]>(
-        queryKeys.conversations.list,
+        queryKeys.conversations.list(knowledgeBaseId),
         (currentList) => replaceConversation(currentList, updatedConversation),
       );
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.list,
+        queryKey: queryKeys.conversations.list(knowledgeBaseId),
       });
     },
   });

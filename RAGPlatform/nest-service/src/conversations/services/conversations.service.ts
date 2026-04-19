@@ -5,6 +5,8 @@ import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationResponse } from '../interfaces/conversation-response.interface';
 import { Conversation, ConversationDocument } from '../schemas/conversation.schema';
+import { KnowledgeBasesService } from '../../knowledge-bases/knowledge-bases.service';
+import { Message, MessageDocument } from '../../messages/schemas/message.schema';
 
 const DEFAULT_CONVERSATION_TITLE = '新会话';
 
@@ -13,6 +15,9 @@ export class ConversationsService {
   constructor(
     @InjectModel(Conversation.name)
     private readonly conversationModel: Model<ConversationDocument>,
+    @InjectModel(Message.name)
+    private readonly messageModel: Model<MessageDocument>,
+    private readonly knowledgeBasesService: KnowledgeBasesService,
   ) {}
 
   async create(
@@ -20,9 +25,14 @@ export class ConversationsService {
     dto: CreateConversationDto,
   ): Promise<ConversationResponse> {
     const normalizedUserId = this.toObjectId(userId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(
+      userId,
+      dto.knowledgeBaseId,
+    );
     const now = new Date();
     const createdConversation = new this.conversationModel({
       userId: normalizedUserId,
+      knowledgeBaseId: this.toObjectId(dto.knowledgeBaseId),
       title: this.normalizeTitle(dto.title),
       lastMessageAt: now,
     });
@@ -30,10 +40,12 @@ export class ConversationsService {
     return this.toResponse(savedConversation);
   }
 
-  async findAllByUser(userId: string): Promise<ConversationResponse[]> {
+  async findAllByUser(userId: string, knowledgeBaseId: string): Promise<ConversationResponse[]> {
     const normalizedUserId = this.toObjectId(userId);
+    const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
     const conversations = await this.conversationModel
-      .find({ userId: normalizedUserId })
+      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
       .sort({ lastMessageAt: -1 })
       .exec();
     return conversations.map((conversation): ConversationResponse =>
@@ -108,6 +120,13 @@ export class ConversationsService {
     if (!deletedConversation) {
       throw new NotFoundException('Conversation not found');
     }
+
+    await this.messageModel
+      .deleteMany({
+        userId: normalizedUserId,
+        conversationId: normalizedConversationId,
+      })
+      .exec();
   }
 
   private async findOwnedConversation(
@@ -148,6 +167,7 @@ export class ConversationsService {
     return {
       id: conversation.id,
       userId: conversation.userId.toString(),
+      knowledgeBaseId: conversation.knowledgeBaseId.toString(),
       title: conversation.title,
       lastMessageAt: conversation.lastMessageAt,
       createdAt: conversation.createdAt,

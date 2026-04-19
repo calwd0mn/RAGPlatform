@@ -3,6 +3,7 @@ import { ChunkMetadata } from '../../ingestion/interfaces/chunk-metadata.interfa
 export interface RetrievedChunk {
   chunkId: string;
   documentId: string;
+  chunkIndex?: number;
   content: string;
   score: number;
   metadata: ChunkMetadata;

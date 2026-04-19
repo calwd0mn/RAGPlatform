@@ -9,6 +9,9 @@ export class Document {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   userId!: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  knowledgeBaseId!: Types.ObjectId;
+
   @Prop({ required: true, trim: true, maxlength: 255 })
   filename!: string;
 
@@ -33,6 +36,12 @@ export class Document {
   @Prop({ required: false, trim: true, maxlength: 1000 })
   errorMessage?: string;
 
+  @Prop({ required: false, trim: true, maxlength: 120 })
+  activeChunkStrategyName?: string;
+
+  @Prop({ required: false, trim: true, maxlength: 120 })
+  activeChunkStrategyVersion?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
@@ -41,3 +50,4 @@ export const DocumentSchema = SchemaFactory.createForClass(Document);
 
 DocumentSchema.index({ userId: 1, createdAt: -1 });
 DocumentSchema.index({ userId: 1, status: 1 });
+DocumentSchema.index({ userId: 1, knowledgeBaseId: 1, createdAt: -1 });

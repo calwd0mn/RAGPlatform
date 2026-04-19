@@ -17,8 +17,11 @@ import { RagChatModelFactory } from './factories/rag-chat-model.factory';
 import { RetrievedChunk } from './interfaces/retrieved-chunk.interface';
 import { ChunkToCitationMapper } from './mappers/chunk-to-citation.mapper';
 import { MessageHistoryMapper } from './mappers/message-history.mapper';
+import { PromptRenderer } from './prompt/prompt-renderer';
+import { PromptRegistry } from './prompt/prompt-registry';
 import { RagRetrievalService } from './retrievers/rag-retrieval.service';
 import { RagService } from './rag.service';
+import { RagRunRecorderService } from './debug/rag-run-recorder.service';
 
 class StaticEmbeddings extends Embeddings {
   constructor(private readonly value: number[]) {
@@ -62,14 +65,15 @@ interface TestMessageDoc {
     score?: number;
     page?: number;
   }>;
-  trace?: {
-    query?: string;
-    rewrittenQuery?: string;
-    topK?: number;
-    retrievedCount?: number;
-    model?: string;
-    latencyMs?: number;
-  };
+    trace?: {
+      query?: string;
+      rewrittenQuery?: string;
+      topK?: number;
+      retrievedCount?: number;
+      model?: string;
+      promptVersion?: string;
+      latencyMs?: number;
+    };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -132,6 +136,12 @@ describe('RagService', () => {
   let ragChatModelFactoryMock: {
     create: jest.Mock;
     getModelLabel: jest.Mock;
+  };
+  let promptRegistryMock: {
+    getCurrent: jest.Mock;
+  };
+  let ragRunRecorderMock: {
+    record: jest.Mock;
   };
   let connectionMock: {
     startSession: jest.Mock;
@@ -211,6 +221,18 @@ describe('RagService', () => {
       ),
       getModelLabel: jest.fn(() => 'fake-rag-model'),
     };
+    promptRegistryMock = {
+      getCurrent: jest.fn(() => ({
+        id: 'rag-answer',
+        version: 'v1',
+        versionedId: 'rag-answer@v1',
+        systemPrompt: 'system',
+        contextTemplate: '检索上下文如下：\n{context}',
+      })),
+    };
+    ragRunRecorderMock = {
+      record: jest.fn(async () => undefined),
+    };
 
     sessionMock = {
       withTransaction: jest.fn(async (runInTransaction: () => Promise<void>) =>
@@ -257,6 +279,18 @@ describe('RagService', () => {
         {
           provide: RagChatModelFactory,
           useValue: ragChatModelFactoryMock,
+        },
+        {
+          provide: PromptRegistry,
+          useValue: promptRegistryMock,
+        },
+        {
+          provide: PromptRenderer,
+          useValue: new PromptRenderer(),
+        },
+        {
+          provide: RagRunRecorderService,
+          useValue: ragRunRecorderMock,
         },
         {
           provide: getConnectionToken(),

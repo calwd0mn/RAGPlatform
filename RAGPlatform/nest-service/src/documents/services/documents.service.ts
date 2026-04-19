@@ -12,12 +12,18 @@ import { DocumentResponse } from '../interfaces/document-response.interface';
 import { DocumentStatusEnum } from '../interfaces/document-status.type';
 import { UploadedDocumentFile } from '../interfaces/uploaded-document-file.interface';
 import { Document, DocumentDocument } from '../schemas/document.schema';
+import { Chunk, ChunkDocument } from '../../ingestion/schemas/chunk.schema';
+import {
+  DebugExperimentChunk,
+  DebugExperimentChunkDocument,
+} from '../../schemas/debug-experiment-chunk.schema';
 import {
   buildDocumentStoragePath,
   isAllowedDocumentFileType,
   normalizeUploadedOriginalName,
   removeStoredDocumentFile,
 } from '../utils/document-file.util';
+import { KnowledgeBasesService } from '../../knowledge-bases/knowledge-bases.service';
 
 @Injectable()
 export class DocumentsService {
@@ -26,10 +32,16 @@ export class DocumentsService {
   constructor(
     @InjectModel(Document.name)
     private readonly documentModel: Model<DocumentDocument>,
+    @InjectModel(Chunk.name)
+    private readonly chunkModel: Model<ChunkDocument>,
+    @InjectModel(DebugExperimentChunk.name)
+    private readonly debugExperimentChunkModel: Model<DebugExperimentChunkDocument>,
+    private readonly knowledgeBasesService: KnowledgeBasesService,
   ) {}
 
   async createFromUpload(
     userId: string,
+    knowledgeBaseId: string,
     file: UploadedDocumentFile | undefined,
   ): Promise<DocumentResponse> {
     if (!file) {
@@ -47,10 +59,13 @@ export class DocumentsService {
     }
 
     const normalizedUserId = this.toObjectId(userId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
+    const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
     const storagePath = buildDocumentStoragePath(file.path);
 
     const createdDocument = new this.documentModel({
       userId: normalizedUserId,
+      knowledgeBaseId: normalizedKnowledgeBaseId,
       filename: file.filename,
       originalName: normalizedOriginalName,
       mimeType: file.mimetype,
@@ -68,10 +83,12 @@ export class DocumentsService {
     }
   }
 
-  async findAllByUser(userId: string): Promise<DocumentResponse[]> {
+  async findAllByUser(userId: string, knowledgeBaseId: string): Promise<DocumentResponse[]> {
     const normalizedUserId = this.toObjectId(userId);
+    const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
     const documents = await this.documentModel
-      .find({ userId: normalizedUserId })
+      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
       .sort({ createdAt: -1 })
       .exec();
 
@@ -94,6 +111,21 @@ export class DocumentsService {
     if (!deletedDocument) {
       throw new NotFoundException('Document not found');
     }
+
+    await Promise.all([
+      this.chunkModel
+        .deleteMany({
+          userId: normalizedUserId,
+          documentId: normalizedDocumentId,
+        })
+        .exec(),
+      this.debugExperimentChunkModel
+        .deleteMany({
+          userId: normalizedUserId,
+          documentId: normalizedDocumentId,
+        })
+        .exec(),
+    ]);
 
     await removeStoredDocumentFile(deletedDocument.storagePath).catch((error: Error) => {
       this.logger.warn(
@@ -128,6 +160,7 @@ export class DocumentsService {
     return {
       id: document.id,
       userId: document.userId.toString(),
+      knowledgeBaseId: document.knowledgeBaseId.toString(),
       filename: document.filename,
       originalName: document.originalName,
       mimeType: document.mimeType,

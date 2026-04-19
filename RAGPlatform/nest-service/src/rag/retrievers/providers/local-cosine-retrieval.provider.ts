@@ -10,6 +10,7 @@ import { RagRetrievalProvider } from '../interfaces/rag-retrieval-provider.inter
 interface ChunkCandidateDocument {
   _id: Types.ObjectId;
   documentId: Types.ObjectId;
+  chunkIndex: number;
   embedding: number[];
   metadata: ChunkMetadata;
 }
@@ -30,20 +31,22 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
 
   async retrieveTopKByUser(
     userId: string,
+    knowledgeBaseId: string,
     queryEmbedding: number[],
     topK: number,
   ): Promise<RetrievedChunk[]> {
     const normalizedUserId = this.toObjectId(userId);
+    const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
     const candidateLimit = Math.max(
       topK,
       getRagRetrievalConfig().vectorCandidateLimit,
     );
 
     const candidates = await this.chunkModel
-      .find({ userId: normalizedUserId })
+      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
       .sort({ createdAt: -1 })
       .limit(candidateLimit)
-      .select({ _id: 1, documentId: 1, embedding: 1, metadata: 1 })
+      .select({ _id: 1, documentId: 1, chunkIndex: 1, embedding: 1, metadata: 1 })
       .lean<ChunkCandidateDocument[]>()
       .exec();
 
@@ -58,6 +61,7 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
         ): {
           chunkId: string;
           documentId: string;
+          chunkIndex: number;
           score: number;
           metadata: ChunkMetadata;
         } | null => {
@@ -69,6 +73,7 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
           return {
             chunkId: candidate._id.toString(),
             documentId: candidate.documentId.toString(),
+            chunkIndex: candidate.chunkIndex,
             score,
             metadata: candidate.metadata,
           };
@@ -80,6 +85,7 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
         ): candidate is {
           chunkId: string;
           documentId: string;
+          chunkIndex: number;
           score: number;
           metadata: ChunkMetadata;
         } => candidate !== null,
@@ -95,7 +101,11 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
       (candidate): Types.ObjectId => new Types.ObjectId(candidate.chunkId),
     );
     const contentRows = await this.chunkModel
-      .find({ _id: { $in: targetIds }, userId: normalizedUserId })
+      .find({
+        _id: { $in: targetIds },
+        userId: normalizedUserId,
+        knowledgeBaseId: normalizedKnowledgeBaseId,
+      })
       .select({ _id: 1, content: 1 })
       .lean<ChunkContentDocument[]>()
       .exec();
@@ -114,6 +124,7 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
         return {
           chunkId: candidate.chunkId,
           documentId: candidate.documentId,
+          chunkIndex: candidate.chunkIndex,
           content,
           score: candidate.score,
           metadata: candidate.metadata,

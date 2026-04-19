@@ -3,12 +3,18 @@ import { Alert, Button, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentList } from "../../hooks/document/useDocumentList";
+import { useKnowledgeBaseList } from "../../hooks/knowledge-base/useKnowledgeBaseList";
+import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import { toDocumentDisplayStatus } from "../../utils/document-status";
 import styles from "./KnowledgeBaseStatusBar.module.css";
 
 export function KnowledgeBaseStatusBar() {
   const navigate = useNavigate();
   const documentListQuery = useDocumentList();
+  const knowledgeBaseListQuery = useKnowledgeBaseList();
+  const currentKnowledgeBaseId = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseId,
+  );
 
   const readyCount = useMemo(() => {
     const documents = documentListQuery.data ?? [];
@@ -32,6 +38,13 @@ export function KnowledgeBaseStatusBar() {
   }
 
   const isEmpty = readyCount === 0;
+  const currentKnowledgeBase = useMemo(
+    () =>
+      (knowledgeBaseListQuery.data ?? []).find(
+        (item) => item.id === currentKnowledgeBaseId,
+      ),
+    [currentKnowledgeBaseId, knowledgeBaseListQuery.data],
+  );
 
   return (
     <Alert
@@ -44,6 +57,7 @@ export function KnowledgeBaseStatusBar() {
             <DatabaseOutlined />
             <Typography.Text strong>知识库状态</Typography.Text>
           </Space>
+          <Tag color="blue">{currentKnowledgeBase?.name ?? "未选择知识库"}</Tag>
           <Tag color={isEmpty ? "default" : "success"}>可问答文档 {readyCount}</Tag>
           <Typography.Text type={isEmpty ? "warning" : "secondary"}>
             {isEmpty

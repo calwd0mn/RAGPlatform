@@ -3,6 +3,7 @@ import { DocumentStatus } from './document-status.type';
 export interface DocumentResponse {
   id: string;
   userId: string;
+  knowledgeBaseId: string;
   filename: string;
   originalName: string;
   mimeType: string;

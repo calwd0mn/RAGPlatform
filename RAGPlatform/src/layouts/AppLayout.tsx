@@ -7,6 +7,7 @@ import {
 } from "@ant-design/icons";
 import { Avatar, Button, Layout, Space, Tabs, Typography } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { KnowledgeBaseSwitcher } from "../components/knowledge-base/KnowledgeBaseSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import styles from "./AppLayout.module.css";
 
@@ -38,6 +39,7 @@ export function AppLayout() {
           </Typography.Title>
 
           <Space size={12}>
+            <KnowledgeBaseSwitcher />
             <Space size={8}>
               <Avatar size="small" icon={<UserOutlined />} />
               <Typography.Text>{currentUser?.username ?? "未命名用户"}</Typography.Text>

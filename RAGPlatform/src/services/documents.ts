@@ -3,6 +3,7 @@ import type { DocumentRecord } from "../types/document";
 
 interface DocumentApiItem {
   id: string;
+  knowledgeBaseId: string;
   filename: string;
   originalName?: string;
   mimeType?: string;
@@ -97,6 +98,7 @@ function toDocumentRecord(item: DocumentApiItem): DocumentRecord {
 
   return {
     id: item.id,
+    knowledgeBaseId: item.knowledgeBaseId,
     filename: normalizedOriginalName || item.filename,
     fileType: normalizeFileType(item),
     sizeLabel: formatSizeLabel(item.size),
@@ -105,9 +107,14 @@ function toDocumentRecord(item: DocumentApiItem): DocumentRecord {
   };
 }
 
-export async function getDocuments(): Promise<DocumentRecord[]> {
+export async function getDocuments(knowledgeBaseId: string): Promise<DocumentRecord[]> {
   const response = await http.get<DocumentApiItem[] | ApiResponseLike<DocumentApiItem[]>>(
     "/documents",
+    {
+      params: {
+        knowledgeBaseId,
+      },
+    },
   );
   const payload = response.data;
   const listCandidate = Array.isArray(payload) ? payload : payload.data;
@@ -117,9 +124,13 @@ export async function getDocuments(): Promise<DocumentRecord[]> {
   return listCandidate.map((item) => toDocumentRecord(item));
 }
 
-export async function uploadDocument(file: File): Promise<DocumentRecord> {
+export async function uploadDocument(
+  file: File,
+  knowledgeBaseId: string,
+): Promise<DocumentRecord> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("knowledgeBaseId", knowledgeBaseId);
 
   const response = await http.post<DocumentApiItem>("/documents/upload", formData, {
     headers: {

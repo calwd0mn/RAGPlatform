@@ -9,6 +9,9 @@ export class Chunk {
   @Prop({ type: Types.ObjectId, required: true, index: true, ref: 'User' })
   userId!: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  knowledgeBaseId!: Types.ObjectId;
+
   @Prop({ type: Types.ObjectId, required: true, index: true, ref: 'Document' })
   documentId!: Types.ObjectId;
 
@@ -32,4 +35,4 @@ export const ChunkSchema = SchemaFactory.createForClass(Chunk);
 
 ChunkSchema.index({ documentId: 1, chunkIndex: 1 }, { unique: true });
 ChunkSchema.index({ userId: 1, documentId: 1 });
-
+ChunkSchema.index({ userId: 1, knowledgeBaseId: 1 });

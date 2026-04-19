@@ -6,7 +6,10 @@ const DEFAULT_VECTOR_INDEX_NAME = 'chunk_vector_index';
 const DEFAULT_VECTOR_PATH = 'embedding';
 const DEFAULT_VECTOR_CANDIDATE_LIMIT = 100;
 
-export type RagRetrievalProviderType = 'atlas' | 'local';
+export type RagRetrievalProviderType =
+  | 'atlas'
+  | 'local'
+  | 'debug-experiment-local';
 
 export interface RagRetrievalConfig {
   provider: RagRetrievalProviderType;

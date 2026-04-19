@@ -1,73 +1,76 @@
-# React + TypeScript + Vite
+# RAGPlatform（最终收口版）
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+本仓库为可演示、可验收、可交付的 RAG 项目收口版本。
 
-Currently, two official plugins are available:
+## 交付范围
+详见 DELIVERY_SCOPE.md。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+本期范围固定为：
+- 文档上传 / 入库
+- RAG 问答（/rag/ask）
+- citations / trace
+- prompt 调试
+- chunk 调试
 
-## React Compiler
+## 目录说明
+- src/：前端（React + Vite）
+- 
+est-service/：后端（NestJS + MongoDB）
+- docs/：交付文档、调试手册、演示脚本
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+## 环境准备
+1. Node.js 20+
+2. MongoDB 6+
+3. 安装依赖：
+   - 前端：
+pm install
+   - 后端：cd nest-service && npm install
 
-## Expanding the ESLint configuration
+## 环境变量
+请参考根目录 .env.example。
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+建议：
+1. 前端将变量写入根目录 .env.development
+2. 后端将变量写入 
+est-service/.env
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 本地启动
+1. 启动后端
+`ash
+cd nest-service
+npm run start:dev
+`
+2. 启动前端
+`ash
+npm run dev
+`
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+默认前端走 /api 代理到后端，请根据本地实际端口调整 VITE_API_BASE_URL。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 核心验收清单
+1. 注册并登录成功。
+2. 上传文档成功。
+3. 触发 ingestion 后文档进入 eady。
+4. 调用 /rag/ask 返回 nswer/citations/trace。
+5. 聊天页可查看 citations / trace。
+6. 调试页可执行 prompt 调试与 chunk 调试。
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 最小回归（Smoke）
+后端提供最小 e2e smoke 用例：
+`ash
+cd nest-service
+npm run test:e2e -- delivery-smoke.e2e-spec.ts --runInBand
+`
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 调试接口访问限制
+为最小安全收口，调试接口支持附加 token：
+- 环境变量：RAG_DEBUG_ACCESS_TOKEN
+- 请求头：x-debug-token
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+当配置了 RAG_DEBUG_ACCESS_TOKEN 时，不携带或携带错误 token 的调试请求返回 404。
+
+## 文档索引
+- docs/DEBUG_GUIDE.md
+- docs/DEMO_SCRIPT.md
+- docs/KNOWN_ISSUES.md
+- docs/API_DEBUG.md

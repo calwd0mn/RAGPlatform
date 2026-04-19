@@ -1,7 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsMongoId, IsOptional, Max, Min } from 'class-validator';
 
 export class GetChunkContextQueryDto {
+  @IsMongoId()
+  knowledgeBaseId!: string;
+
+  @IsOptional()
+  @IsMongoId()
+  experimentId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -16,4 +23,3 @@ export class GetChunkContextQueryDto {
   @Max(5)
   after?: number;
 }
-

@@ -1,8 +1,11 @@
 export interface ChunkContextItem {
   chunkId: string;
   documentId: string;
+  documentName?: string;
+  order: number;
   chunkIndex: number;
   content: string;
+  contentPreview: string;
   page?: number;
 }
 
@@ -11,4 +14,3 @@ export interface ChunkContextResponse {
   previous: ChunkContextItem[];
   next: ChunkContextItem[];
 }
-

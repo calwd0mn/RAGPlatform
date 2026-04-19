@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "deps:check": "npm ls --omit=optional --depth=0"
+    "deps:check": "npm ls --omit=optional --depth=0",
+    "chunk-strategy:test": "ts-node scripts/run-chunk-strategy-test.ts"
   },
   "jest": {
     "moduleFileExtensions": [

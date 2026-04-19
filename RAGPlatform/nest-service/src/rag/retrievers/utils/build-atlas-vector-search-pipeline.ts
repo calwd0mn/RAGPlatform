@@ -9,6 +9,7 @@ interface VectorSearchStage {
     limit: number;
     filter: {
       userId: Types.ObjectId;
+      knowledgeBaseId: Types.ObjectId;
     };
   };
 }
@@ -18,6 +19,7 @@ interface ProjectStage {
     _id: 1;
     userId: 1;
     documentId: 1;
+    chunkIndex: 1;
     content: 1;
     metadata: 1;
     score: {
@@ -33,6 +35,7 @@ export function buildAtlasVectorSearchPipeline(input: {
   topK: number;
   candidateLimit: number;
   userId: Types.ObjectId;
+  knowledgeBaseId: Types.ObjectId;
 }): [VectorSearchStage, ProjectStage] {
   return [
     {
@@ -44,6 +47,7 @@ export function buildAtlasVectorSearchPipeline(input: {
         limit: input.topK,
         filter: {
           userId: input.userId,
+          knowledgeBaseId: input.knowledgeBaseId,
         },
       },
     },
@@ -52,6 +56,7 @@ export function buildAtlasVectorSearchPipeline(input: {
         _id: 1,
         userId: 1,
         documentId: 1,
+        chunkIndex: 1,
         content: 1,
         metadata: 1,
         score: { $meta: 'vectorSearchScore' },

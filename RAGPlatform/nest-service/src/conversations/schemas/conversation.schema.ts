@@ -8,6 +8,9 @@ export class Conversation {
   @Prop({ type: Types.ObjectId, required: true, index: true })
   userId!: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, required: true, index: true })
+  knowledgeBaseId!: Types.ObjectId;
+
   @Prop({ required: true, trim: true, maxlength: 100 })
   title!: string;
 
@@ -21,3 +24,4 @@ export class Conversation {
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 
 ConversationSchema.index({ userId: 1, lastMessageAt: -1 });
+ConversationSchema.index({ userId: 1, knowledgeBaseId: 1, lastMessageAt: -1 });

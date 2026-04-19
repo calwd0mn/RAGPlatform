@@ -3,11 +3,13 @@ import type { ConversationItem } from "../types/chat";
 
 interface ConversationResponse {
   id: string;
+  knowledgeBaseId: string;
   title: string;
   lastMessageAt: string;
 }
 
 interface CreateConversationPayload {
+  knowledgeBaseId: string;
   title?: string;
 }
 
@@ -26,18 +28,25 @@ function formatTimeLabel(value: string): string {
 function toConversationItem(response: ConversationResponse): ConversationItem {
   return {
     id: response.id,
+    knowledgeBaseId: response.knowledgeBaseId,
     title: response.title,
     updatedAt: formatTimeLabel(response.lastMessageAt),
   };
 }
 
-export async function getConversations(): Promise<ConversationItem[]> {
-  const response = await http.get<ConversationResponse[]>("/conversations");
+export async function getConversations(
+  knowledgeBaseId: string,
+): Promise<ConversationItem[]> {
+  const response = await http.get<ConversationResponse[]>("/conversations", {
+    params: {
+      knowledgeBaseId,
+    },
+  });
   return response.data.map(toConversationItem);
 }
 
 export async function createConversation(
-  payload: CreateConversationPayload = {},
+  payload: CreateConversationPayload,
 ): Promise<ConversationItem> {
   const response = await http.post<ConversationResponse>("/conversations", payload);
   return toConversationItem(response.data);

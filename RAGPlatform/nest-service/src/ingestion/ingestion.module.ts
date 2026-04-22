@@ -4,6 +4,7 @@ import { Document, DocumentSchema } from '../documents/schemas/document.schema';
 import { ChunkMetadataBuilder } from './builders/chunk-metadata.builder';
 import { IngestionController } from './controllers/ingestion.controller';
 import { IngestionEmbeddingsFactory } from './embeddings/embeddings.factory';
+import { ChunkVectorDocumentMapper } from './mappers/chunk-vector-document.mapper';
 import { DocumentLoaderFactory } from './loaders/document-loader.factory';
 import { LangchainDocumentMapper } from './mappers/langchain-document.mapper';
 import { Chunk, ChunkSchema } from './schemas/chunk.schema';
@@ -24,6 +25,7 @@ import { ChunkVectorStoreService } from './vector-stores/chunk-vector-store.serv
     DocumentLoaderFactory,
     TextSplitterFactory,
     IngestionEmbeddingsFactory,
+    ChunkVectorDocumentMapper,
     LangchainDocumentMapper,
     ChunkMetadataBuilder,
     ChunkVectorStoreService,
@@ -31,6 +33,7 @@ import { ChunkVectorStoreService } from './vector-stores/chunk-vector-store.serv
   exports: [
     IngestionService,
     IngestionEmbeddingsFactory,
+    ChunkVectorDocumentMapper,
     DocumentLoaderFactory,
     TextSplitterFactory,
     LangchainDocumentMapper,

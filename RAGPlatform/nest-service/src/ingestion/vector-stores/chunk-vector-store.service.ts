@@ -7,31 +7,9 @@ import { Model, Types } from 'mongoose';
 import { RetrievedChunk } from '../../rag/interfaces/retrieved-chunk.interface';
 import { getRagRetrievalConfig } from '../../rag/retrievers/config/rag-retrieval.config';
 import { ChunkMetadata } from '../interfaces/chunk-metadata.interface';
+import { ChunkVectorDocumentMapper } from '../mappers/chunk-vector-document.mapper';
 import { Chunk, ChunkDocument } from '../schemas/chunk.schema';
 import { IngestionEmbeddingsFactory } from '../embeddings/embeddings.factory';
-
-type ChunkVectorDocumentMetadata = Record<
-  string,
-  Types.ObjectId | number | ChunkMetadata
-> & {
-  userId: Types.ObjectId;
-  knowledgeBaseId: Types.ObjectId;
-  documentId: Types.ObjectId;
-  chunkIndex: number;
-  metadata: ChunkMetadata;
-};
-
-type ChunkVectorSearchMetadata = Record<
-  string,
-  Types.ObjectId | string | number | ChunkMetadata | undefined
-> & {
-  _id?: Types.ObjectId | string;
-  userId?: Types.ObjectId | string;
-  knowledgeBaseId?: Types.ObjectId | string;
-  documentId?: Types.ObjectId | string;
-  chunkIndex?: number;
-  metadata?: ChunkMetadata;
-};
 
 @Injectable()
 export class ChunkVectorStoreService {
@@ -39,6 +17,7 @@ export class ChunkVectorStoreService {
     @InjectModel(Chunk.name)
     private readonly chunkModel: Model<ChunkDocument>,
     private readonly embeddingsFactory: IngestionEmbeddingsFactory,
+    private readonly chunkVectorDocumentMapper: ChunkVectorDocumentMapper,
   ) {}
 
   async replaceDocumentChunks(input: {
@@ -58,16 +37,13 @@ export class ChunkVectorStoreService {
       (
         chunkDocument: LangChainDocument<ChunkMetadata>,
         chunkIndex: number,
-      ): LangChainDocument<ChunkVectorDocumentMetadata> =>
-        new LangChainDocument<ChunkVectorDocumentMetadata>({
-          pageContent: chunkDocument.pageContent,
-          metadata: {
-            userId: input.userId,
-            knowledgeBaseId: input.knowledgeBaseId,
-            documentId: input.documentId,
-            chunkIndex,
-            metadata: chunkDocument.metadata,
-          },
+      ): LangChainDocument =>
+        this.chunkVectorDocumentMapper.toVectorDocument({
+          chunkDocument,
+          chunkIndex,
+          userId: input.userId,
+          knowledgeBaseId: input.knowledgeBaseId,
+          documentId: input.documentId,
         }),
     );
 
@@ -99,12 +75,12 @@ export class ChunkVectorStoreService {
 
     return rows
       .map(([document, score]): RetrievedChunk | null =>
-        this.mapSearchResult(
+        this.chunkVectorDocumentMapper.toRetrievedChunk({
           document,
           score,
-          input.userId,
-          input.knowledgeBaseId,
-        ),
+          userId: input.userId,
+          knowledgeBaseId: input.knowledgeBaseId,
+        }),
       )
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
   }
@@ -123,44 +99,4 @@ export class ChunkVectorStoreService {
     );
   }
 
-  private mapSearchResult(
-    document: LangChainDocument,
-    score: number,
-    userId: Types.ObjectId,
-    knowledgeBaseId: Types.ObjectId,
-  ): RetrievedChunk | null {
-    const metadata = document.metadata as ChunkVectorSearchMetadata;
-    const chunkId = this.toIdString(metadata._id);
-    const documentId = this.toIdString(metadata.documentId);
-    const rowUserId = this.toIdString(metadata.userId);
-    const rowKnowledgeBaseId = this.toIdString(metadata.knowledgeBaseId);
-
-    if (
-      !chunkId ||
-      !documentId ||
-      rowUserId !== userId.toString() ||
-      rowKnowledgeBaseId !== knowledgeBaseId.toString()
-    ) {
-      return null;
-    }
-
-    return {
-      chunkId,
-      documentId,
-      chunkIndex: metadata.chunkIndex,
-      content: document.pageContent,
-      score,
-      metadata: metadata.metadata ?? {},
-    };
-  }
-
-  private toIdString(
-    value: Types.ObjectId | string | undefined,
-  ): string | null {
-    if (!value) {
-      return null;
-    }
-
-    return value.toString();
-  }
 }

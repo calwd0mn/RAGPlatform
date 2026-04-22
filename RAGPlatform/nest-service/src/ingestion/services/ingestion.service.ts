@@ -46,7 +46,7 @@ export class IngestionService {
   async start(userId: string, documentId: string): Promise<IngestionResult> {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedDocumentId = this.toObjectId(documentId);
-
+    // 给状态上锁，避免并发重复提交
     const document = await this.documentModel
       .findOneAndUpdate(
         {
@@ -70,7 +70,7 @@ export class IngestionService {
     }
 
     const lockedDocument = document;
-
+    // 
     try {
       const loadedDocuments = await this.documentLoaderFactory.load({
         storagePath: lockedDocument.storagePath,

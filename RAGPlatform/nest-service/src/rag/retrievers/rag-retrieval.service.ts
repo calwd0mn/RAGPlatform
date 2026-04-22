@@ -1,4 +1,6 @@
+import { RunnableLambda } from '@langchain/core/runnables';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { RetrievedChunk } from '../interfaces/retrieved-chunk.interface';
 import {
   RagRetrievalConfig,
@@ -14,7 +16,45 @@ export class RagRetrievalService {
   constructor(
     private readonly atlasVectorRetrievalProvider: AtlasVectorRetrievalProvider,
     private readonly localCosineRetrievalProvider: LocalCosineRetrievalProvider,
+    private readonly embeddingsFactory: IngestionEmbeddingsFactory,
   ) {}
+
+  async retrieveTopKByQueryWithProvider(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    query: string;
+    topK: number;
+  }): Promise<RagRetrievalOutput> {
+    const chain = RunnableLambda.from<
+      {
+        userId: string;
+        knowledgeBaseId: string;
+        query: string;
+        topK: number;
+      },
+      RagRetrievalOutput
+    >(async (chainInput): Promise<RagRetrievalOutput> => {
+      let queryEmbedding: number[];
+      try {
+        queryEmbedding = await this.embeddingsFactory
+          .createEmbeddings()
+          .embedQuery(chainInput.query);
+      } catch {
+        throw new InternalServerErrorException(
+          'Failed to generate query embedding',
+        );
+      }
+
+      return this.retrieveTopKByUserWithProvider(
+        chainInput.userId,
+        chainInput.knowledgeBaseId,
+        queryEmbedding,
+        chainInput.topK,
+      );
+    });
+
+    return chain.invoke(input);
+  }
 
   async retrieveTopKByUser(
     userId: string,

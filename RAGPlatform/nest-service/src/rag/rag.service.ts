@@ -10,7 +10,6 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableLambda, RunnableSequence } from '@langchain/core/runnables';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ConversationsService } from '../conversations/services/conversations.service';
-import { IngestionEmbeddingsFactory } from '../ingestion/embeddings/embeddings.factory';
 import { MessageRoleEnum } from '../messages/interfaces/message-role.type';
 import { MessageTrace } from '../messages/interfaces/message-trace.interface';
 import { Message, MessageDocument } from '../messages/schemas/message.schema';
@@ -73,7 +72,6 @@ export class RagService {
     @InjectConnection()
     private readonly connection: Connection,
     private readonly conversationsService: ConversationsService,
-    private readonly embeddingsFactory: IngestionEmbeddingsFactory,
     private readonly ragRetrievalService: RagRetrievalService,
     private readonly ragContextBuilder: RagContextBuilder,
     private readonly messageHistoryMapper: MessageHistoryMapper,
@@ -134,24 +132,13 @@ export class RagService {
         trace: undefined,
       });
 
-      let queryEmbedding: number[];
-      try {
-        queryEmbedding = await this.embeddingsFactory
-          .createEmbeddings()
-          .embedQuery(query);
-      } catch {
-        throw new InternalServerErrorException(
-          'Failed to generate query embedding',
-        );
-      }
-
       const retrievalOutput =
-        await this.ragRetrievalService.retrieveTopKByUserWithProvider(
+        await this.ragRetrievalService.retrieveTopKByQueryWithProvider({
           userId,
           knowledgeBaseId,
-          queryEmbedding,
+          query,
           topK,
-        );
+        });
       retrievedChunks = retrievalOutput.chunks;
       retrievalProvider = retrievalOutput.provider;
       const citations = retrievedChunks.map(

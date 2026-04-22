@@ -1,5 +1,7 @@
+import { Embeddings } from '@langchain/core/embeddings';
 import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { RetrievedChunk } from '../interfaces/retrieved-chunk.interface';
 import { AtlasVectorRetrievalProvider } from './providers/atlas-vector-retrieval.provider';
 import { LocalCosineRetrievalProvider } from './providers/local-cosine-retrieval.provider';
@@ -18,6 +20,34 @@ const SAMPLE_CHUNKS: RetrievedChunk[] = [
   },
 ];
 
+class StaticEmbeddings extends Embeddings {
+  constructor(private readonly value: number[]) {
+    super({});
+  }
+
+  async embedDocuments(documents: string[]): Promise<number[][]> {
+    return documents.map((): number[] => this.value);
+  }
+
+  async embedQuery(_document: string): Promise<number[]> {
+    return this.value;
+  }
+}
+
+class FailingEmbeddings extends Embeddings {
+  constructor() {
+    super({});
+  }
+
+  async embedDocuments(documents: string[]): Promise<number[][]> {
+    return documents.map((): number[] => []);
+  }
+
+  async embedQuery(_document: string): Promise<number[]> {
+    throw new Error('embedding failed');
+  }
+}
+
 describe('RagRetrievalService', () => {
   let service: RagRetrievalService;
   let atlasProviderMock: {
@@ -25,6 +55,9 @@ describe('RagRetrievalService', () => {
   };
   let localProviderMock: {
     retrieveTopKByUser: jest.Mock;
+  };
+  let embeddingsFactoryMock: {
+    createEmbeddings: jest.Mock;
   };
 
   const originalEnv = { ...process.env };
@@ -39,6 +72,9 @@ describe('RagRetrievalService', () => {
     localProviderMock = {
       retrieveTopKByUser: jest.fn(),
     };
+    embeddingsFactoryMock = {
+      createEmbeddings: jest.fn(() => new StaticEmbeddings([0.2, 0.4])),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RagRetrievalService,
@@ -49,6 +85,10 @@ describe('RagRetrievalService', () => {
         {
           provide: LocalCosineRetrievalProvider,
           useValue: localProviderMock,
+        },
+        {
+          provide: IngestionEmbeddingsFactory,
+          useValue: embeddingsFactoryMock,
         },
       ],
     }).compile();
@@ -83,6 +123,46 @@ describe('RagRetrievalService', () => {
     expect(localProviderMock.retrieveTopKByUser).not.toHaveBeenCalled();
     expect(result).toEqual(SAMPLE_CHUNKS);
     expect(output.provider).toBe('atlas');
+  });
+
+  it('embeds query before selecting the configured provider', async () => {
+    process.env.RAG_RETRIEVAL_PROVIDER = 'local';
+    localProviderMock.retrieveTopKByUser.mockResolvedValue(SAMPLE_CHUNKS);
+
+    const output = await service.retrieveTopKByQueryWithProvider({
+      userId,
+      knowledgeBaseId,
+      query: '什么是RAG?',
+      topK: 3,
+    });
+
+    expect(embeddingsFactoryMock.createEmbeddings).toHaveBeenCalledTimes(1);
+    expect(localProviderMock.retrieveTopKByUser).toHaveBeenCalledWith(
+      userId,
+      knowledgeBaseId,
+      [0.2, 0.4],
+      3,
+    );
+    expect(output.chunks).toEqual(SAMPLE_CHUNKS);
+    expect(output.provider).toBe('local');
+  });
+
+  it('throws explicit error when query embedding fails', async () => {
+    embeddingsFactoryMock.createEmbeddings.mockReturnValue(
+      new FailingEmbeddings(),
+    );
+
+    await expect(
+      service.retrieveTopKByQueryWithProvider({
+        userId,
+        knowledgeBaseId,
+        query: 'hello',
+        topK: 3,
+      }),
+    ).rejects.toThrow('Failed to generate query embedding');
+
+    expect(localProviderMock.retrieveTopKByUser).not.toHaveBeenCalled();
+    expect(atlasProviderMock.retrieveTopKByUser).not.toHaveBeenCalled();
   });
 
   it('selects local provider when RAG_RETRIEVAL_PROVIDER=local', async () => {

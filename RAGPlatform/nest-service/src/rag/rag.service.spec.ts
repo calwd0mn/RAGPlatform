@@ -1,4 +1,3 @@
-import { Embeddings } from '@langchain/core/embeddings';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { fakeModel } from '@langchain/core/testing';
 import {
@@ -9,7 +8,6 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { ConversationsService } from '../conversations/services/conversations.service';
-import { IngestionEmbeddingsFactory } from '../ingestion/embeddings/embeddings.factory';
 import { MessageRoleEnum } from '../messages/interfaces/message-role.type';
 import { Message } from '../messages/schemas/message.schema';
 import { RagContextBuilder } from './builders/rag-context.builder';
@@ -21,34 +19,6 @@ import { PromptRenderer } from './prompt/prompt-renderer';
 import { PromptRegistry } from './prompt/prompt-registry';
 import { RagRetrievalService } from './retrievers/rag-retrieval.service';
 import { RagService } from './rag.service';
-
-class StaticEmbeddings extends Embeddings {
-  constructor(private readonly value: number[]) {
-    super({});
-  }
-
-  async embedDocuments(documents: string[]): Promise<number[][]> {
-    return documents.map((): number[] => this.value);
-  }
-
-  async embedQuery(_document: string): Promise<number[]> {
-    return this.value;
-  }
-}
-
-class FailingEmbeddings extends Embeddings {
-  constructor() {
-    super({});
-  }
-
-  async embedDocuments(documents: string[]): Promise<number[][]> {
-    return documents.map((): number[] => []);
-  }
-
-  async embedQuery(_document: string): Promise<number[]> {
-    throw new Error('embedding failed');
-  }
-}
 
 interface TestMessageDoc {
   id: string;
@@ -121,11 +91,8 @@ describe('RagService', () => {
     findOneByUser: jest.Mock;
     touchLastMessageAt: jest.Mock;
   };
-  let embeddingsFactoryMock: {
-    createEmbeddings: jest.Mock;
-  };
   let retrievalServiceMock: {
-    retrieveTopKByUserWithProvider: jest.Mock;
+    retrieveTopKByQueryWithProvider: jest.Mock;
   };
   let ragContextBuilderMock: {
     build: jest.Mock;
@@ -192,12 +159,8 @@ describe('RagService', () => {
       touchLastMessageAt: jest.fn(),
     };
 
-    embeddingsFactoryMock = {
-      createEmbeddings: jest.fn(() => new StaticEmbeddings([1, 0, 0])),
-    };
-
     retrievalServiceMock = {
-      retrieveTopKByUserWithProvider: jest.fn(),
+      retrieveTopKByQueryWithProvider: jest.fn(),
     };
 
     ragContextBuilderMock = {
@@ -262,10 +225,6 @@ describe('RagService', () => {
           useValue: conversationsServiceMock,
         },
         {
-          provide: IngestionEmbeddingsFactory,
-          useValue: embeddingsFactoryMock,
-        },
-        {
           provide: RagRetrievalService,
           useValue: retrievalServiceMock,
         },
@@ -314,7 +273,7 @@ describe('RagService', () => {
       }),
     ];
     messageModelMock.find.mockReturnValue(createFindQueryChain(historyDocs));
-    retrievalServiceMock.retrieveTopKByUserWithProvider.mockResolvedValue({
+    retrievalServiceMock.retrieveTopKByQueryWithProvider.mockResolvedValue({
       chunks: [
         {
           chunkId: '507f1f77bcf86cd799439041',
@@ -384,7 +343,7 @@ describe('RagService', () => {
 
   it('returns valid response when retrieval is empty', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
-    retrievalServiceMock.retrieveTopKByUserWithProvider.mockResolvedValue({
+    retrievalServiceMock.retrieveTopKByQueryWithProvider.mockResolvedValue({
       chunks: [],
       provider: 'local',
     });
@@ -401,8 +360,8 @@ describe('RagService', () => {
 
   it('handles embedding failure with internal server error', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
-    embeddingsFactoryMock.createEmbeddings.mockReturnValue(
-      new FailingEmbeddings(),
+    retrievalServiceMock.retrieveTopKByQueryWithProvider.mockRejectedValue(
+      new InternalServerErrorException('Failed to generate query embedding'),
     );
 
     await expect(
@@ -420,7 +379,7 @@ describe('RagService', () => {
 
   it('handles model failure with internal server error', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
-    retrievalServiceMock.retrieveTopKByUserWithProvider.mockResolvedValue({
+    retrievalServiceMock.retrieveTopKByQueryWithProvider.mockResolvedValue({
       chunks: [],
       provider: 'local',
     });
@@ -441,7 +400,7 @@ describe('RagService', () => {
 
   it('keeps retrieval explicit error message from retrieval layer', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
-    retrievalServiceMock.retrieveTopKByUserWithProvider.mockRejectedValue(
+    retrievalServiceMock.retrieveTopKByQueryWithProvider.mockRejectedValue(
       new InternalServerErrorException(
         'Atlas retrieval is unavailable: atlas down',
       ),

@@ -45,6 +45,15 @@ class MessageTraceSchemaClass implements MessageTrace {
   retrievedCount?: number;
 
   @Prop()
+  contextChunkCount?: number;
+
+  @Prop()
+  contextCharCount?: number;
+
+  @Prop()
+  contextTrimmed?: boolean;
+
+  @Prop()
   model?: string;
 
   @Prop()

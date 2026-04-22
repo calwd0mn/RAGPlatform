@@ -85,20 +85,26 @@ export class ChunkVectorStoreService {
       throw new InternalServerErrorException('Query embedding is empty');
     }
 
-    const rows = await this.createAtlasVectorStore().similaritySearchVectorWithScore(
-      input.queryEmbedding,
-      input.topK,
-      {
-        preFilter: {
-          userId: input.userId,
-          knowledgeBaseId: input.knowledgeBaseId,
+    const rows =
+      await this.createAtlasVectorStore().similaritySearchVectorWithScore(
+        input.queryEmbedding,
+        input.topK,
+        {
+          preFilter: {
+            userId: input.userId,
+            knowledgeBaseId: input.knowledgeBaseId,
+          },
         },
-      },
-    );
+      );
 
     return rows
       .map(([document, score]): RetrievedChunk | null =>
-        this.mapSearchResult(document, score, input.userId, input.knowledgeBaseId),
+        this.mapSearchResult(
+          document,
+          score,
+          input.userId,
+          input.knowledgeBaseId,
+        ),
       )
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
   }
@@ -148,7 +154,9 @@ export class ChunkVectorStoreService {
     };
   }
 
-  private toIdString(value: Types.ObjectId | string | undefined): string | null {
+  private toIdString(
+    value: Types.ObjectId | string | undefined,
+  ): string | null {
     if (!value) {
       return null;
     }

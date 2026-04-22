@@ -69,6 +69,9 @@ interface TestMessageDoc {
     rewrittenQuery?: string;
     topK?: number;
     retrievedCount?: number;
+    contextChunkCount?: number;
+    contextCharCount?: number;
+    contextTrimmed?: boolean;
     model?: string;
     promptVersion?: string;
     latencyMs?: number;
@@ -198,7 +201,12 @@ describe('RagService', () => {
     };
 
     ragContextBuilderMock = {
-      build: jest.fn(() => 'context'),
+      build: jest.fn(() => ({
+        context: 'context',
+        contextChunkCount: 1,
+        contextCharCount: 7,
+        contextTrimmed: false,
+      })),
     };
 
     messageHistoryMapperMock = {
@@ -331,6 +339,9 @@ describe('RagService', () => {
     expect(result.answer.length).toBeGreaterThan(0);
     expect(result.citations).toHaveLength(1);
     expect(result.trace.retrievedCount).toBe(1);
+    expect(result.trace.contextChunkCount).toBe(1);
+    expect(result.trace.contextCharCount).toBe(7);
+    expect(result.trace.contextTrimmed).toBe(false);
     expect(result.trace.topK).toBe(4);
     expect(result.trace.retrievalProvider).toBe('local');
     expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(
@@ -340,12 +351,20 @@ describe('RagService', () => {
 
     const assistantPayload = messageModelMock.mock.calls[1][0] as {
       citations: Array<{ chunkId?: string }>;
-      trace?: { retrievedCount?: number };
+      trace?: {
+        retrievedCount?: number;
+        contextChunkCount?: number;
+        contextCharCount?: number;
+        contextTrimmed?: boolean;
+      };
     };
     expect(assistantPayload.citations[0].chunkId).toBe(
       '507f1f77bcf86cd799439041',
     );
     expect(assistantPayload.trace?.retrievedCount).toBe(1);
+    expect(assistantPayload.trace?.contextChunkCount).toBe(1);
+    expect(assistantPayload.trace?.contextCharCount).toBe(7);
+    expect(assistantPayload.trace?.contextTrimmed).toBe(false);
   });
 
   it('returns not found on non-owned conversation', async () => {

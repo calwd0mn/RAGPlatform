@@ -14,7 +14,10 @@ import { IngestionEmbeddingsFactory } from '../ingestion/embeddings/embeddings.f
 import { MessageRoleEnum } from '../messages/interfaces/message-role.type';
 import { MessageTrace } from '../messages/interfaces/message-trace.interface';
 import { Message, MessageDocument } from '../messages/schemas/message.schema';
-import { RagContextBuilder } from './builders/rag-context.builder';
+import {
+  RagContextBuilder,
+  RagContextBuildResult,
+} from './builders/rag-context.builder';
 import { AskRagDto } from './dto/ask-rag.dto';
 import { RagChatModelFactory } from './factories/rag-chat-model.factory';
 import { RagAnswer } from './interfaces/rag-answer.interface';
@@ -53,6 +56,11 @@ interface AnswerChainPromptInput {
   context: string;
   history: BaseMessage[];
   question: string;
+}
+
+interface GeneratedAnswerResult {
+  answer: string;
+  contextStats: RagContextBuildResult;
 }
 
 @Injectable()
@@ -152,7 +160,7 @@ export class RagService {
 
       const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
 
-      const answer = await this.generateAnswer({
+      const answerResult = await this.generateAnswer({
         question: query,
         preparedAnswer,
         retrievedChunks,
@@ -166,6 +174,9 @@ export class RagService {
         query,
         topK,
         retrievedCount: retrievedChunks.length,
+        contextChunkCount: answerResult.contextStats.contextChunkCount,
+        contextCharCount: answerResult.contextStats.contextCharCount,
+        contextTrimmed: answerResult.contextStats.contextTrimmed,
         model: this.ragChatModelFactory.getModelLabel(),
         retrievalProvider,
         promptVersion: promptDefinition.versionedId,
@@ -176,19 +187,22 @@ export class RagService {
         userId,
         conversationId: dto.conversationId,
         role: MessageRoleEnum.Assistant,
-        content: answer,
+        content: answerResult.answer,
         citations,
         trace,
       });
 
       return {
-        answer,
+        answer: answerResult.answer,
         citations,
         trace: {
           knowledgeBaseId,
           query,
           topK,
           retrievedCount: retrievedChunks.length,
+          contextChunkCount: trace.contextChunkCount,
+          contextCharCount: trace.contextCharCount,
+          contextTrimmed: trace.contextTrimmed,
           model: this.ragChatModelFactory.getModelLabel(),
           retrievalProvider,
           promptVersion: promptDefinition.versionedId,
@@ -214,16 +228,20 @@ export class RagService {
     historyItems: HistoryMessageItem[];
     promptDefinition: RagPromptDefinition;
     options: AskExecutionOptions;
-  }): Promise<string> {
+  }): Promise<GeneratedAnswerResult> {
     try {
       const chainInput = {
         question: input.question,
         retrievedChunks: input.retrievedChunks,
         historyItems: input.historyItems,
       };
+      let contextStats: RagContextBuildResult | null = null;
       const chain = await this.buildAnswerChain(
         input.preparedAnswer,
         input.promptDefinition,
+        (result): void => {
+          contextStats = result;
+        },
       );
       const chainConfig = input.options.signal
         ? {
@@ -232,7 +250,10 @@ export class RagService {
         : undefined;
 
       if (!input.options.onToken) {
-        return (await chain.invoke(chainInput, chainConfig)).trim();
+        return {
+          answer: (await chain.invoke(chainInput, chainConfig)).trim(),
+          contextStats: this.ensureContextStats(contextStats),
+        };
       }
 
       let answerBuffer = '';
@@ -250,10 +271,16 @@ export class RagService {
 
       const trimmedAnswer = answerBuffer.trim();
       if (trimmedAnswer.length > 0) {
-        return trimmedAnswer;
+        return {
+          answer: trimmedAnswer,
+          contextStats: this.ensureContextStats(contextStats),
+        };
       }
 
-      return (await chain.invoke(chainInput, chainConfig)).trim();
+      return {
+        answer: (await chain.invoke(chainInput, chainConfig)).trim(),
+        contextStats: this.ensureContextStats(contextStats),
+      };
     } catch {
       throw new InternalServerErrorException('Failed to generate answer');
     }
@@ -262,21 +289,26 @@ export class RagService {
   private async buildAnswerChain(
     preparedAnswer: string,
     promptDefinition: RagPromptDefinition,
+    onContextBuilt: (result: RagContextBuildResult) => void,
   ): Promise<RunnableSequence<AnswerChainInput, string>> {
     const model = await this.ragChatModelFactory.create(preparedAnswer);
     const prompt = this.promptRenderer.createTemplate(promptDefinition);
     const formatPromptInput = RunnableLambda.from<
       AnswerChainInput,
       AnswerChainPromptInput
-    >(
-      (chainInput: AnswerChainInput): AnswerChainPromptInput => ({
-        context: this.ragContextBuilder.build(chainInput.retrievedChunks),
+    >((chainInput: AnswerChainInput): AnswerChainPromptInput => {
+      const contextResult = this.ragContextBuilder.build(
+        chainInput.retrievedChunks,
+      );
+      onContextBuilt(contextResult);
+      return {
+        context: contextResult.context,
         history: this.messageHistoryMapper.toLangchainMessages(
           chainInput.historyItems,
         ),
         question: chainInput.question,
-      }),
-    );
+      };
+    });
 
     return RunnableSequence.from([
       formatPromptInput,
@@ -284,6 +316,16 @@ export class RagService {
       model,
       new StringOutputParser(),
     ]);
+  }
+
+  private ensureContextStats(
+    contextStats: RagContextBuildResult | null,
+  ): RagContextBuildResult {
+    if (contextStats) {
+      return contextStats;
+    }
+
+    return this.ragContextBuilder.build([]);
   }
 
   private prepareFallbackAnswer(chunks: RetrievedChunk[]): string {

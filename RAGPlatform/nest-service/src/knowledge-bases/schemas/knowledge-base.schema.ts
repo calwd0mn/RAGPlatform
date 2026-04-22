@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { ChunkSplitterType } from '../../ingestion/chunk-strategy/chunk-strategy.types';
 
 export type KnowledgeBaseDocument = HydratedDocument<KnowledgeBase>;
 
@@ -20,12 +21,23 @@ export class KnowledgeBase {
   @Prop({ required: false, trim: true, maxlength: 120 })
   activeChunkStrategyVersion?: string;
 
+  @Prop({ required: false, min: 50, max: 8000 })
+  activeChunkSize?: number;
+
+  @Prop({ required: false, min: 0, max: 4000 })
+  activeChunkOverlap?: number;
+
+  @Prop({ required: false, enum: ['recursive', 'markdown', 'token'] })
+  activeChunkSplitterType?: ChunkSplitterType;
+
+  @Prop({ required: false, default: false })
+  activeChunkPreserveSentenceBoundary?: boolean;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
 
-export const KnowledgeBaseSchema =
-  SchemaFactory.createForClass(KnowledgeBase);
+export const KnowledgeBaseSchema = SchemaFactory.createForClass(KnowledgeBase);
 
 KnowledgeBaseSchema.index({ userId: 1, name: 1 }, { unique: true });
 KnowledgeBaseSchema.index(

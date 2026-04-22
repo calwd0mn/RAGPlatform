@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { AuthUser } from '../../auth/interfaces/auth-user.interface';
@@ -32,6 +25,9 @@ export class MessagesController {
     @CurrentUser() user: AuthUser,
     @Param() params: ConversationMessagesParamDto,
   ): Promise<MessageResponse[]> {
-    return this.messagesService.findByConversation(user.id, params.conversationId);
+    return this.messagesService.findByConversation(
+      user.id,
+      params.conversationId,
+    );
   }
 }

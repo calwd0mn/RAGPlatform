@@ -22,6 +22,7 @@ import {
 } from './chunk-strategy-test-chunk.schema';
 import { NormalizedChunkStrategyConfig } from './chunk-strategy.types';
 import { TextSplitterFactory } from '../splitters/text-splitter.factory';
+import { cosineSimilarity } from '../../rag/retrievers/utils/cosine-similarity.util';
 
 interface TestChunkCandidateDocument {
   _id: Types.ObjectId;
@@ -170,7 +171,14 @@ export class ChunkStrategyRunner {
         strategyName: input.strategyName,
         documentId: { $in: normalizedDocumentIds },
       })
-      .select({ _id: 1, documentId: 1, chunkIndex: 1, embedding: 1, content: 1, metadata: 1 })
+      .select({
+        _id: 1,
+        documentId: 1,
+        chunkIndex: 1,
+        embedding: 1,
+        content: 1,
+        metadata: 1,
+      })
       .lean<TestChunkCandidateDocument[]>()
       .exec();
 
@@ -180,22 +188,15 @@ export class ChunkStrategyRunner {
 
     return rows
       .map(
-        (row): RetrievedChunk | null => {
-          const score = this.cosineSimilarity(input.queryEmbedding, row.embedding);
-          if (!Number.isFinite(score)) {
-            return null;
-          }
-          return {
-            chunkId: row._id.toString(),
-            documentId: row.documentId.toString(),
-            chunkIndex: row.chunkIndex,
-            content: row.content,
-            score,
-            metadata: row.metadata,
-          };
-        },
+        (row): RetrievedChunk => ({
+          chunkId: row._id.toString(),
+          documentId: row.documentId.toString(),
+          chunkIndex: row.chunkIndex,
+          content: row.content,
+          score: cosineSimilarity(input.queryEmbedding, row.embedding),
+          metadata: row.metadata,
+        }),
       )
-      .filter((item): item is RetrievedChunk => item !== null)
       .sort((left, right): number => right.score - left.score)
       .slice(0, input.topK);
   }
@@ -212,7 +213,9 @@ export class ChunkStrategyRunner {
       .exec();
 
     if (rows.length !== documentIds.length) {
-      throw new NotFoundException('Some documents do not exist or are not owned by user');
+      throw new NotFoundException(
+        'Some documents do not exist or are not owned by user',
+      );
     }
 
     return rows;
@@ -226,7 +229,10 @@ export class ChunkStrategyRunner {
         unique.add(normalized);
       }
     });
-    return Array.from(unique, (value): Types.ObjectId => this.toObjectId(value));
+    return Array.from(
+      unique,
+      (value): Types.ObjectId => this.toObjectId(value),
+    );
   }
 
   private toObjectId(value: string): Types.ObjectId {
@@ -234,29 +240,5 @@ export class ChunkStrategyRunner {
       throw new BadRequestException('Invalid id');
     }
     return new Types.ObjectId(value);
-  }
-
-  private cosineSimilarity(left: number[], right: number[]): number {
-    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
-      return Number.NaN;
-    }
-
-    let dotProduct = 0;
-    let leftNorm = 0;
-    let rightNorm = 0;
-
-    for (let i = 0; i < left.length; i += 1) {
-      const leftValue = left[i];
-      const rightValue = right[i];
-      dotProduct += leftValue * rightValue;
-      leftNorm += leftValue * leftValue;
-      rightNorm += rightValue * rightValue;
-    }
-
-    if (leftNorm === 0 || rightNorm === 0) {
-      return Number.NaN;
-    }
-
-    return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
   }
 }

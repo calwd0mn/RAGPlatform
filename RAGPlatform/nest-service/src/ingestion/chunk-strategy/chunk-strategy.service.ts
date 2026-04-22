@@ -6,7 +6,6 @@ import {
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { randomUUID } from 'crypto';
-import { MessageRoleEnum } from '../../messages/interfaces/message-role.type';
 import { mapRetrievedChunksToRunHits } from '../../rag/debug/utils/map-retrieval-hits.util';
 import { RagContextBuilder } from '../../rag/builders/rag-context.builder';
 import { RagChatModelFactory } from '../../rag/factories/rag-chat-model.factory';
@@ -76,14 +75,15 @@ export class ChunkStrategyService {
       const queryHits: ChunkStrategyQueryHit[] = [];
       for (const query of normalizedQueries) {
         const queryEmbedding = await embeddings.embedQuery(query);
-        const retrievedChunks = await this.chunkStrategyRunner.retrieveByStrategy({
-          userId,
-          testRunId,
-          strategyName: strategy.name,
-          queryEmbedding,
-          topK,
-          documentIds: dto.documentIds,
-        });
+        const retrievedChunks =
+          await this.chunkStrategyRunner.retrieveByStrategy({
+            userId,
+            testRunId,
+            strategyName: strategy.name,
+            queryEmbedding,
+            topK,
+            documentIds: dto.documentIds,
+          });
 
         const citations = retrievedChunks.map((chunk) =>
           this.chunkToCitationMapper.map(chunk),
@@ -198,12 +198,8 @@ export class ChunkStrategyService {
     try {
       const answer = await chain.invoke({
         context,
-        history: this.messageHistoryMapper.toLangchainMessages([
-          {
-            role: MessageRoleEnum.User,
-            content: input.query,
-          },
-        ]),
+        history: this.messageHistoryMapper.toLangchainMessages([]),
+        question: input.query,
       });
       return answer.trim();
     } catch {

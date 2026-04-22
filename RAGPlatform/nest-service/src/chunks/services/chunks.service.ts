@@ -6,19 +6,39 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Document, DocumentDocument } from '../../documents/schemas/document.schema';
+import {
+  Document,
+  DocumentDocument,
+} from '../../documents/schemas/document.schema';
 import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { Chunk, ChunkDocument } from '../../ingestion/schemas/chunk.schema';
 import {
   DebugExperimentChunk,
   DebugExperimentChunkDocument,
 } from '../../schemas/debug-experiment-chunk.schema';
-import { ChunkContextItem, ChunkContextResponse } from '../interfaces/chunk-context-response.interface';
-import { ChunkDebugItem, ChunksDebugResponse } from '../interfaces/chunks-debug-response.interface';
+import {
+  ChunkContextItem,
+  ChunkContextResponse,
+} from '../interfaces/chunk-context-response.interface';
+import {
+  ChunkDebugItem,
+  ChunksDebugResponse,
+} from '../interfaces/chunks-debug-response.interface';
 
 const DEFAULT_CONTEXT_WINDOW = 1;
 const DEFAULT_DEBUG_LIMIT = 20;
 const CONTENT_PREVIEW_LIMIT = 240;
+
+type ChunkReadDocument = ChunkDocument | DebugExperimentChunkDocument;
+type ChunkDebugBaseQuery = {
+  userId: Types.ObjectId;
+  knowledgeBaseId: Types.ObjectId;
+  experimentId?: Types.ObjectId;
+  strategyName?: string;
+  documentId?: Types.ObjectId;
+  'metadata.page'?: number;
+  content?: { $regex: string; $options: string };
+};
 
 @Injectable()
 export class ChunksService {
@@ -46,17 +66,13 @@ export class ChunksService {
   }): Promise<ChunksDebugResponse> {
     const userObjectId = this.toObjectId(input.userId);
     const knowledgeBaseObjectId = this.toObjectId(input.knowledgeBaseId);
+    const isExperimentQuery = Boolean(input.experimentId);
     const limit = input.limit ?? DEFAULT_DEBUG_LIMIT;
     const offset = input.offset ?? 0;
-    const baseQuery: {
-      userId: Types.ObjectId;
-      knowledgeBaseId: Types.ObjectId;
-      experimentId?: Types.ObjectId;
-      strategyName?: string;
-      documentId?: Types.ObjectId;
-      'metadata.page'?: number;
-      content?: { $regex: string; $options: string };
-    } = { userId: userObjectId, knowledgeBaseId: knowledgeBaseObjectId };
+    const baseQuery: ChunkDebugBaseQuery = {
+      userId: userObjectId,
+      knowledgeBaseId: knowledgeBaseObjectId,
+    };
 
     if (input.documentId) {
       baseQuery.documentId = this.toObjectId(input.documentId);
@@ -85,51 +101,25 @@ export class ChunksService {
           .createEmbeddings()
           .embedQuery(input.query.trim());
       } catch {
-        throw new InternalServerErrorException('Failed to generate query embedding');
+        throw new InternalServerErrorException(
+          'Failed to generate query embedding',
+        );
       }
     }
 
-    const rows = input.experimentId
-      ? await this.debugExperimentChunkModel
-          .find(baseQuery)
-          .sort({ createdAt: -1 })
-          .skip(offset)
-          .limit(limit)
-          .select({
-            _id: 1,
-            documentId: 1,
-            chunkIndex: 1,
-            chunkNamespace: 1,
-            strategyName: 1,
-            content: 1,
-            embedding: 1,
-            metadata: 1,
-          })
-          .exec()
-      : await this.chunkModel
-          .find(baseQuery)
-          .sort({ createdAt: -1 })
-          .skip(offset)
-          .limit(limit)
-          .select({
-            _id: 1,
-            documentId: 1,
-            chunkIndex: 1,
-            chunkNamespace: 1,
-            strategyName: 1,
-            content: 1,
-            embedding: 1,
-            metadata: 1,
-          })
-          .exec();
-    const total = input.experimentId
-      ? await this.debugExperimentChunkModel.countDocuments(baseQuery).exec()
-      : await this.chunkModel.countDocuments(baseQuery).exec();
+    const { rows, total } = await this.queryDebugRowsAndTotal({
+      isExperimentQuery,
+      baseQuery,
+      limit,
+      offset,
+    });
 
-    const documentMap = await this.loadDocumentNameMap(rows.map((row): string => row.documentId.toString()));
+    const documentMap = await this.loadDocumentNameMap(
+      rows.map((row): string => row.documentId.toString()),
+    );
     const items = rows.map(
       (row): ChunkDebugItem => ({
-        chunkId: row.id,
+        chunkId: row._id.toString(),
         documentId: row.documentId.toString(),
         documentName:
           documentMap.get(row.documentId.toString()) ??
@@ -143,13 +133,17 @@ export class ChunksService {
             ? undefined
             : this.cosineSimilarity(queryEmbedding, row.embedding),
         contentPreview: this.toContentPreview(row.content),
-        retrievalSource: input.experimentId ? 'experiment' : 'production',
+        retrievalSource: isExperimentQuery ? 'experiment' : 'production',
         retrievalNamespace:
-          input.experimentId && 'chunkNamespace' in row && typeof row.chunkNamespace === 'string'
+          isExperimentQuery &&
+          'chunkNamespace' in row &&
+          typeof row.chunkNamespace === 'string'
             ? row.chunkNamespace
             : 'production',
         strategyName:
-          input.experimentId && 'strategyName' in row && typeof row.strategyName === 'string'
+          isExperimentQuery &&
+          'strategyName' in row &&
+          typeof row.strategyName === 'string'
             ? row.strategyName
             : undefined,
       }),
@@ -212,90 +206,96 @@ export class ChunksService {
       throw new NotFoundException('Chunk not found');
     }
 
-    const previous = before > 0
-      ? input.experimentId
-        ? await this.debugExperimentChunkModel
-            .find({
-              userId: normalizedUserId,
-              knowledgeBaseId: normalizedKnowledgeBaseId,
-              documentId: current.documentId,
-              experimentId: this.toObjectId(input.experimentId),
-              chunkIndex: { $lt: current.chunkIndex },
-            })
-            .select({
-              _id: 1,
-              documentId: 1,
-              chunkIndex: 1,
-              content: 1,
-              metadata: 1,
-            })
-            .sort({ chunkIndex: -1 })
-            .limit(before)
-            .exec()
-        : await this.chunkModel
-            .find({
-              userId: normalizedUserId,
-              knowledgeBaseId: normalizedKnowledgeBaseId,
-              documentId: current.documentId,
-              chunkIndex: { $lt: current.chunkIndex },
-            })
-            .select({
-              _id: 1,
-              documentId: 1,
-              chunkIndex: 1,
-              content: 1,
-              metadata: 1,
-            })
-            .sort({ chunkIndex: -1 })
-            .limit(before)
-            .exec()
-      : [];
-    const next = after > 0
-      ? input.experimentId
-        ? await this.debugExperimentChunkModel
-            .find({
-              userId: normalizedUserId,
-              knowledgeBaseId: normalizedKnowledgeBaseId,
-              documentId: current.documentId,
-              experimentId: this.toObjectId(input.experimentId),
-              chunkIndex: { $gt: current.chunkIndex },
-            })
-            .select({
-              _id: 1,
-              documentId: 1,
-              chunkIndex: 1,
-              content: 1,
-              metadata: 1,
-            })
-            .sort({ chunkIndex: 1 })
-            .limit(after)
-            .exec()
-        : await this.chunkModel
-            .find({
-              userId: normalizedUserId,
-              knowledgeBaseId: normalizedKnowledgeBaseId,
-              documentId: current.documentId,
-              chunkIndex: { $gt: current.chunkIndex },
-            })
-            .select({
-              _id: 1,
-              documentId: 1,
-              chunkIndex: 1,
-              content: 1,
-              metadata: 1,
-            })
-            .sort({ chunkIndex: 1 })
-            .limit(after)
-            .exec()
-      : [];
-    const documentMap = await this.loadDocumentNameMap([current.documentId.toString()]);
+    const previous: ChunkReadDocument[] =
+      before > 0
+        ? input.experimentId
+          ? await this.debugExperimentChunkModel
+              .find({
+                userId: normalizedUserId,
+                knowledgeBaseId: normalizedKnowledgeBaseId,
+                documentId: current.documentId,
+                experimentId: this.toObjectId(input.experimentId),
+                chunkIndex: { $lt: current.chunkIndex },
+              })
+              .select({
+                _id: 1,
+                documentId: 1,
+                chunkIndex: 1,
+                content: 1,
+                metadata: 1,
+              })
+              .sort({ chunkIndex: -1 })
+              .limit(before)
+              .exec()
+          : await this.chunkModel
+              .find({
+                userId: normalizedUserId,
+                knowledgeBaseId: normalizedKnowledgeBaseId,
+                documentId: current.documentId,
+                chunkIndex: { $lt: current.chunkIndex },
+              })
+              .select({
+                _id: 1,
+                documentId: 1,
+                chunkIndex: 1,
+                content: 1,
+                metadata: 1,
+              })
+              .sort({ chunkIndex: -1 })
+              .limit(before)
+              .exec()
+        : [];
+    const next: ChunkReadDocument[] =
+      after > 0
+        ? input.experimentId
+          ? await this.debugExperimentChunkModel
+              .find({
+                userId: normalizedUserId,
+                knowledgeBaseId: normalizedKnowledgeBaseId,
+                documentId: current.documentId,
+                experimentId: this.toObjectId(input.experimentId),
+                chunkIndex: { $gt: current.chunkIndex },
+              })
+              .select({
+                _id: 1,
+                documentId: 1,
+                chunkIndex: 1,
+                content: 1,
+                metadata: 1,
+              })
+              .sort({ chunkIndex: 1 })
+              .limit(after)
+              .exec()
+          : await this.chunkModel
+              .find({
+                userId: normalizedUserId,
+                knowledgeBaseId: normalizedKnowledgeBaseId,
+                documentId: current.documentId,
+                chunkIndex: { $gt: current.chunkIndex },
+              })
+              .select({
+                _id: 1,
+                documentId: 1,
+                chunkIndex: 1,
+                content: 1,
+                metadata: 1,
+              })
+              .sort({ chunkIndex: 1 })
+              .limit(after)
+              .exec()
+        : [];
+    const documentMap = await this.loadDocumentNameMap([
+      current.documentId.toString(),
+    ]);
 
     return {
       current: this.toContextItem(current, documentMap),
       previous: previous
         .reverse()
         .map((item): ChunkContextItem => this.toContextItem(item, documentMap)),
-      next: next.map((item): ChunkContextItem => this.toContextItem(item, documentMap)),
+      next: next.map(
+        (item): ChunkContextItem => this.toContextItem(item, documentMap),
+      ),
     };
   }
 
@@ -306,7 +306,61 @@ export class ChunksService {
     return new Types.ObjectId(value);
   }
 
-  private async loadDocumentNameMap(documentIds: string[]): Promise<Map<string, string>> {
+  private async queryDebugRowsAndTotal(input: {
+    isExperimentQuery: boolean;
+    baseQuery: ChunkDebugBaseQuery;
+    limit: number;
+    offset: number;
+  }): Promise<{ rows: ChunkReadDocument[]; total: number }> {
+    const projection = {
+      _id: 1,
+      documentId: 1,
+      chunkIndex: 1,
+      chunkNamespace: 1,
+      strategyName: 1,
+      content: 1,
+      embedding: 1,
+      metadata: 1,
+    };
+
+    if (input.isExperimentQuery) {
+      const [rows, total] = await Promise.all([
+        this.debugExperimentChunkModel
+          .find(input.baseQuery)
+          .sort({ createdAt: -1 })
+          .skip(input.offset)
+          .limit(input.limit)
+          .select(projection)
+          .exec(),
+        this.debugExperimentChunkModel.countDocuments(input.baseQuery).exec(),
+      ]);
+
+      return {
+        rows,
+        total,
+      };
+    }
+
+    const [rows, total] = await Promise.all([
+      this.chunkModel
+        .find(input.baseQuery)
+        .sort({ createdAt: -1 })
+        .skip(input.offset)
+        .limit(input.limit)
+        .select(projection)
+        .exec(),
+      this.chunkModel.countDocuments(input.baseQuery).exec(),
+    ]);
+
+    return {
+      rows,
+      total,
+    };
+  }
+
+  private async loadDocumentNameMap(
+    documentIds: string[],
+  ): Promise<Map<string, string>> {
     const uniqueIds = Array.from(new Set(documentIds))
       .filter((value): boolean => Types.ObjectId.isValid(value))
       .map((value): Types.ObjectId => new Types.ObjectId(value));
@@ -320,7 +374,10 @@ export class ChunksService {
       .exec();
 
     return new Map<string, string>(
-      rows.map((row): [string, string] => [row.id, row.originalName]),
+      rows.map((row): [string, string] => [
+        row._id.toString(),
+        row.originalName,
+      ]),
     );
   }
 
@@ -337,7 +394,11 @@ export class ChunksService {
   }
 
   private cosineSimilarity(left: number[], right: number[]): number {
-    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+    if (
+      left.length === 0 ||
+      right.length === 0 ||
+      left.length !== right.length
+    ) {
       return 0;
     }
 
@@ -366,7 +427,7 @@ export class ChunksService {
   ): ChunkContextItem {
     const documentId = chunk.documentId.toString();
     return {
-      chunkId: chunk.id,
+      chunkId: chunk._id.toString(),
       documentId,
       documentName:
         documentMap.get(documentId) ??

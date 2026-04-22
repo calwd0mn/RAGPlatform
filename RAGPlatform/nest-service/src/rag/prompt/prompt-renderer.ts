@@ -1,5 +1,8 @@
 import { BaseMessage, MessageContent } from '@langchain/core/messages';
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from '@langchain/core/prompts';
 import { Injectable } from '@nestjs/common';
 import { RagPromptDefinition } from './prompt-registry';
 
@@ -20,6 +23,7 @@ export class PromptRenderer {
       ['system', definition.systemPrompt],
       ['system', definition.contextTemplate],
       new MessagesPlaceholder('history'),
+      ['human', '{question}'],
     ]);
   }
 
@@ -27,11 +31,13 @@ export class PromptRenderer {
     definition: RagPromptDefinition;
     context: string;
     history: BaseMessage[];
+    question: string;
   }): Promise<PromptRenderResult> {
     const template = this.createTemplate(input.definition);
     const messages = await template.formatMessages({
       context: input.context,
       history: input.history,
+      question: input.question,
     });
 
     const rendered = messages.map(

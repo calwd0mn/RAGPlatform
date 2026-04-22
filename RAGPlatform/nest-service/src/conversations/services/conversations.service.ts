@@ -1,18 +1,32 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import { CreateConversationDto } from '../dto/create-conversation.dto';
 import { UpdateConversationDto } from '../dto/update-conversation.dto';
 import { ConversationResponse } from '../interfaces/conversation-response.interface';
-import { Conversation, ConversationDocument } from '../schemas/conversation.schema';
+import {
+  Conversation,
+  ConversationDocument,
+} from '../schemas/conversation.schema';
 import { KnowledgeBasesService } from '../../knowledge-bases/knowledge-bases.service';
-import { Message, MessageDocument } from '../../messages/schemas/message.schema';
+import {
+  Message,
+  MessageDocument,
+} from '../../messages/schemas/message.schema';
 
 const DEFAULT_CONVERSATION_TITLE = '新会话';
 
 @Injectable()
 export class ConversationsService {
   constructor(
+    // 针对NestJS中的Module和Provider有以下理解：
+    // 1.InjectModel()告诉NestJS拿出名为(xx.name)的Provider实例给我，是由Module进行维护的一个实例
+    // 2.Module也是一个实例，在NestJS中，Module是单例模式，会维护一个Provider单例池，也就是说所有Provider也是一个单例会被实例化
+    // 3.只要涉及 “创建一个独一无二的新数据记录”，通常都需要实例化（new）
     @InjectModel(Conversation.name)
     private readonly conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name)
@@ -40,21 +54,36 @@ export class ConversationsService {
     return this.toResponse(savedConversation);
   }
 
-  async findAllByUser(userId: string, knowledgeBaseId: string): Promise<ConversationResponse[]> {
+  async findAllByUser(
+    userId: string,
+    knowledgeBaseId: string,
+  ): Promise<ConversationResponse[]> {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
-    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(
+      userId,
+      knowledgeBaseId,
+    );
     const conversations = await this.conversationModel
-      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
+      .find({
+        userId: normalizedUserId,
+        knowledgeBaseId: normalizedKnowledgeBaseId,
+      })
       .sort({ lastMessageAt: -1 })
       .exec();
-    return conversations.map((conversation): ConversationResponse =>
-      this.toResponse(conversation),
+    return conversations.map(
+      (conversation): ConversationResponse => this.toResponse(conversation),
     );
   }
 
-  async findOneByUser(userId: string, conversationId: string): Promise<ConversationResponse> {
-    const conversation = await this.findOwnedConversation(userId, conversationId);
+  async findOneByUser(
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationResponse> {
+    const conversation = await this.findOwnedConversation(
+      userId,
+      conversationId,
+    );
     return this.toResponse(conversation);
   }
 
@@ -114,7 +143,10 @@ export class ConversationsService {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedConversationId = this.toObjectId(conversationId);
     const deletedConversation = await this.conversationModel
-      .findOneAndDelete({ _id: normalizedConversationId, userId: normalizedUserId })
+      .findOneAndDelete({
+        _id: normalizedConversationId,
+        userId: normalizedUserId,
+      })
       .exec();
 
     if (!deletedConversation) {
@@ -126,7 +158,7 @@ export class ConversationsService {
         userId: normalizedUserId,
         conversationId: normalizedConversationId,
       })
-      .exec();
+      .exec(); // MongoDB返回的Query转为真正的Promise
   }
 
   private async findOwnedConversation(
@@ -139,7 +171,7 @@ export class ConversationsService {
     const conversation = await this.conversationModel
       .findOne({ _id: normalizedConversationId, userId: normalizedUserId })
       .session(session ?? null)
-      .exec();
+      .exec(); // 将MongoDB Query立即执行，转为真正的Promise
 
     if (!conversation) {
       throw new NotFoundException('Conversation not found');

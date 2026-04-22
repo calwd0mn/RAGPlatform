@@ -17,7 +17,12 @@ export class DebugExperimentChunk {
   @Prop({ type: Types.ObjectId, required: true, index: true, ref: 'Document' })
   documentId!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: true, index: true, ref: 'DebugExperiment' })
+  @Prop({
+    type: Types.ObjectId,
+    required: true,
+    index: true,
+    ref: 'DebugExperiment',
+  })
   experimentId!: Types.ObjectId;
 
   @Prop({ required: true, trim: true, maxlength: 120, index: true })

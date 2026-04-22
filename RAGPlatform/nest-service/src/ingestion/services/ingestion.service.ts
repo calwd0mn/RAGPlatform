@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -14,12 +15,12 @@ import {
   DocumentDocument,
 } from '../../documents/schemas/document.schema';
 import { ChunkMetadataBuilder } from '../builders/chunk-metadata.builder';
-import { IngestionEmbeddingsFactory } from '../embeddings/embeddings.factory';
 import { IngestionResult } from '../interfaces/ingestion-result.interface';
 import { LangchainDocumentMapper } from '../mappers/langchain-document.mapper';
 import { DocumentLoaderFactory } from '../loaders/document-loader.factory';
 import { Chunk, ChunkDocument } from '../schemas/chunk.schema';
 import { TextSplitterFactory } from '../splitters/text-splitter.factory';
+import { ChunkVectorStoreService } from '../vector-stores/chunk-vector-store.service';
 
 const STARTABLE_STATUSES: readonly DocumentStatusEnum[] = [
   DocumentStatusEnum.Uploaded,
@@ -28,6 +29,8 @@ const STARTABLE_STATUSES: readonly DocumentStatusEnum[] = [
 
 @Injectable()
 export class IngestionService {
+  private readonly logger = new Logger(IngestionService.name);
+
   constructor(
     @InjectModel(Document.name)
     private readonly documentModel: Model<DocumentDocument>,
@@ -35,9 +38,9 @@ export class IngestionService {
     private readonly chunkModel: Model<ChunkDocument>,
     private readonly documentLoaderFactory: DocumentLoaderFactory,
     private readonly textSplitterFactory: TextSplitterFactory,
-    private readonly embeddingsFactory: IngestionEmbeddingsFactory,
     private readonly langchainDocumentMapper: LangchainDocumentMapper,
     private readonly chunkMetadataBuilder: ChunkMetadataBuilder,
+    private readonly chunkVectorStoreService: ChunkVectorStoreService,
   ) {}
 
   async start(userId: string, documentId: string): Promise<IngestionResult> {
@@ -59,7 +62,10 @@ export class IngestionService {
       .exec();
 
     if (!document) {
-      await this.raiseStartConflictReason(normalizedUserId, normalizedDocumentId);
+      await this.raiseStartConflictReason(
+        normalizedUserId,
+        normalizedDocumentId,
+      );
       throw new InternalServerErrorException('Unable to start ingestion');
     }
 
@@ -90,7 +96,17 @@ export class IngestionService {
         DocumentStatusEnum.Parsed,
       );
 
-      const splitter = this.textSplitterFactory.createSplitter();
+      const splitter =
+        typeof lockedDocument.activeChunkSize === 'number' &&
+        typeof lockedDocument.activeChunkOverlap === 'number'
+          ? this.textSplitterFactory.createSplitterByConfig({
+              chunkSize: lockedDocument.activeChunkSize,
+              chunkOverlap: lockedDocument.activeChunkOverlap,
+              splitterType: lockedDocument.activeChunkSplitterType,
+              preserveSentenceBoundary:
+                lockedDocument.activeChunkPreserveSentenceBoundary,
+            })
+          : this.textSplitterFactory.createSplitter();
       const chunkDocuments = await splitter.splitDocuments(mappedDocuments);
 
       if (chunkDocuments.length === 0) {
@@ -121,43 +137,19 @@ export class IngestionService {
           }),
       );
 
-      const embeddings = this.embeddingsFactory.createEmbeddings();
-      const vectors = await embeddings.embedDocuments(
-        chunksForEmbedding.map((chunk): string => chunk.pageContent),
-      );
-
-      if (vectors.length !== chunksForEmbedding.length) {
-        throw new InternalServerErrorException(
-          'Embedding result size mismatch',
-        );
-      }
+      const chunkCount =
+        await this.chunkVectorStoreService.replaceDocumentChunks({
+          userId: normalizedUserId,
+          knowledgeBaseId: lockedDocument.knowledgeBaseId,
+          documentId: normalizedDocumentId,
+          chunks: chunksForEmbedding,
+        });
 
       await this.updateStatus(
         lockedDocument,
         normalizedUserId,
         DocumentStatusEnum.Embedded,
       );
-
-      await this.chunkModel
-        .deleteMany({
-          userId: normalizedUserId,
-          documentId: normalizedDocumentId,
-        })
-        .exec();
-
-      const chunkPayload = chunksForEmbedding.map(
-        (chunkDocument, chunkIndex): Partial<Chunk> => ({
-          userId: normalizedUserId,
-          knowledgeBaseId: lockedDocument.knowledgeBaseId,
-          documentId: normalizedDocumentId,
-          chunkIndex,
-          content: chunkDocument.pageContent,
-          embedding: vectors[chunkIndex],
-          metadata: chunkDocument.metadata,
-        }),
-      );
-
-      await this.chunkModel.insertMany(chunkPayload, { ordered: true });
 
       await this.documentModel
         .updateOne(
@@ -169,11 +161,15 @@ export class IngestionService {
       return {
         documentId: lockedDocument.id,
         finalStatus: DocumentStatusEnum.Ready,
-        chunkCount: chunkPayload.length,
+        chunkCount,
         message: 'Ingestion completed successfully',
       };
     } catch (error) {
       const errorMessage = this.extractErrorMessage(error);
+      this.logger.error(
+        `Failed to ingest document ${lockedDocument.id}: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       await this.chunkModel
         .deleteMany({
           userId: normalizedUserId,

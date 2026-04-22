@@ -11,6 +11,7 @@ interface BuildChunkMetadataInput {
   endOffset?: number;
 }
 
+// 构建Chunk metadata
 @Injectable()
 export class ChunkMetadataBuilder {
   build(input: BuildChunkMetadataInput): ChunkMetadata {
@@ -45,4 +46,3 @@ export class ChunkMetadataBuilder {
     return normalized.length > 0 ? normalized : undefined;
   }
 }
-

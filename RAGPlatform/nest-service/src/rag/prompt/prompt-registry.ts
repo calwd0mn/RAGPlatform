@@ -30,7 +30,8 @@ export class PromptRegistry {
     }
 
     const baseVersion = draft.versionLabel?.trim();
-    const version = baseVersion && baseVersion.length > 0 ? baseVersion : 'draft';
+    const version =
+      baseVersion && baseVersion.length > 0 ? baseVersion : 'draft';
 
     return {
       id: draft.basePromptId,

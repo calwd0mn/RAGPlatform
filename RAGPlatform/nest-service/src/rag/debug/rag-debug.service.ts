@@ -12,12 +12,20 @@ import { ChunkStrategyService } from '../../ingestion/chunk-strategy/chunk-strat
 import { RunChunkStrategyTestDto } from '../../ingestion/chunk-strategy/dto/run-chunk-strategy-test.dto';
 import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { MessageRoleEnum } from '../../messages/interfaces/message-role.type';
-import { Message, MessageDocument } from '../../messages/schemas/message.schema';
+import {
+  Message,
+  MessageDocument,
+} from '../../messages/schemas/message.schema';
 import {
   ChunkStrategyDraft,
   PromptDraft,
 } from '../../schemas/debug-experiment.schema';
-import { RagRun, RagRunDocument, RagRunStatus, RagRunType } from '../../schemas/rag-run.schema';
+import {
+  RagRun,
+  RagRunDocument,
+  RagRunStatus,
+  RagRunType,
+} from '../../schemas/rag-run.schema';
 import { RagContextBuilder } from '../builders/rag-context.builder';
 import { MessageHistoryMapper } from '../mappers/message-history.mapper';
 import { PromptRenderer } from '../prompt/prompt-renderer';
@@ -63,7 +71,13 @@ export class RagDebugService {
     return this.chunkStrategyService.runTest(userId, dto);
   }
 
-  getCurrentPrompt(): { id: string; version: string; versionedId: string; systemPrompt: string; contextTemplate: string } {
+  getCurrentPrompt(): {
+    id: string;
+    version: string;
+    versionedId: string;
+    systemPrompt: string;
+    contextTemplate: string;
+  } {
     this.assertDebugEnabled();
     const current = this.promptRegistry.getCurrent();
     return {
@@ -75,7 +89,10 @@ export class RagDebugService {
     };
   }
 
-  async renderPrompt(userId: string, dto: RenderRagPromptDto): Promise<{
+  async renderPrompt(
+    userId: string,
+    dto: RenderRagPromptDto,
+  ): Promise<{
     query: string;
     topK: number;
     promptVersion: string;
@@ -85,6 +102,7 @@ export class RagDebugService {
     promptInput: {
       context: string;
       historyCount: number;
+      question: string;
     };
     promptOutput: {
       messages: { role: string; content: string }[];
@@ -106,7 +124,9 @@ export class RagDebugService {
     let retrievalHits = mapRetrievedChunksToRunHits([]);
 
     try {
-      const embedding = await this.embeddingsFactory.createEmbeddings().embedQuery(query);
+      const embedding = await this.embeddingsFactory
+        .createEmbeddings()
+        .embedQuery(query);
       const retrievalOutput =
         await this.ragRetrievalService.retrieveTopKByUserWithProvider(
           userId,
@@ -118,15 +138,19 @@ export class RagDebugService {
       retrievalHits = mapRetrievedChunksToRunHits(retrievalOutput.chunks);
 
       const context = this.ragContextBuilder.build(retrievalOutput.chunks);
-      const historyFromStore = dto.conversationId
-        ? await this.findRecentHistory(userId, dto.conversationId, HISTORY_LIMIT)
+      const historyItems = dto.conversationId
+        ? await this.findRecentHistory(
+            userId,
+            dto.conversationId,
+            HISTORY_LIMIT,
+          )
         : [];
-      const historyItems = this.withCurrentQuery(historyFromStore, query);
 
       const rendered = await this.promptRenderer.render({
         definition: promptDefinition,
         context,
         history: this.messageHistoryMapper.toLangchainMessages(historyItems),
+        question: query,
       });
 
       await this.recordDebugRun({
@@ -161,6 +185,7 @@ export class RagDebugService {
         promptInput: {
           context,
           historyCount: historyItems.length,
+          question: query,
         },
         promptOutput: rendered,
         latencyMs: Date.now() - startedAt,
@@ -174,7 +199,8 @@ export class RagDebugService {
         query,
         promptVersion: promptDefinition.versionedId,
         topK,
-        retrievalProvider: retrievalProvider.length > 0 ? retrievalProvider : undefined,
+        retrievalProvider:
+          retrievalProvider.length > 0 ? retrievalProvider : undefined,
         retrievalNamespace: 'production',
         retrievalSource: 'production',
         promptSnapshot: {
@@ -192,11 +218,16 @@ export class RagDebugService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to render prompt debug info');
+      throw new InternalServerErrorException(
+        'Failed to render prompt debug info',
+      );
     }
   }
 
-  async debugRetrieve(userId: string, dto: RetrieveRagDebugDto): Promise<{
+  async debugRetrieve(
+    userId: string,
+    dto: RetrieveRagDebugDto,
+  ): Promise<{
     query: string;
     topK: number;
     promptVersion: string;
@@ -219,7 +250,9 @@ export class RagDebugService {
     let retrievalHits = mapRetrievedChunksToRunHits([]);
 
     try {
-      const embedding = await this.embeddingsFactory.createEmbeddings().embedQuery(query);
+      const embedding = await this.embeddingsFactory
+        .createEmbeddings()
+        .embedQuery(query);
       const retrievalOutput =
         await this.ragRetrievalService.retrieveTopKByUserWithProvider(
           userId,
@@ -268,7 +301,8 @@ export class RagDebugService {
         query,
         promptVersion: promptDefinition.versionedId,
         topK,
-        retrievalProvider: retrievalProvider.length > 0 ? retrievalProvider : undefined,
+        retrievalProvider:
+          retrievalProvider.length > 0 ? retrievalProvider : undefined,
         retrievalNamespace: 'production',
         retrievalSource: 'production',
         promptSnapshot: {
@@ -286,11 +320,16 @@ export class RagDebugService {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed to execute retrieval debug');
+      throw new InternalServerErrorException(
+        'Failed to execute retrieval debug',
+      );
     }
   }
 
-  async findRuns(userId: string, query: GetRagRunsQueryDto): Promise<{
+  async findRuns(
+    userId: string,
+    query: GetRagRunsQueryDto,
+  ): Promise<{
     items: Array<{
       runId: string;
       runType: RagRunType;
@@ -356,33 +395,34 @@ export class RagDebugService {
       .exec();
 
     return {
-      items: rows.map(
-        (row) => ({
-          runId: row.id,
-          runType: row.runType,
-          experimentId: row.experimentId?.toString(),
-          query: row.query,
-          promptVersion: row.promptVersion,
-          topK: row.topK,
-          retrievalProvider: row.retrievalProvider,
-          retrievalNamespace: row.retrievalNamespace,
-          retrievalSource: row.retrievalSource,
-          comparisonKey: row.comparisonKey,
-          promptSnapshot: row.promptSnapshot,
-          chunkStrategySnapshot: row.chunkStrategySnapshot,
-          retrievalHits: row.retrievalHits,
-          latencyMs: row.latencyMs,
-          status: row.status,
-          errorCode: row.errorCode,
-          createdAt: row.createdAt,
-        }),
-      ),
+      items: rows.map((row) => ({
+        runId: row.id,
+        runType: row.runType,
+        experimentId: row.experimentId?.toString(),
+        query: row.query,
+        promptVersion: row.promptVersion,
+        topK: row.topK,
+        retrievalProvider: row.retrievalProvider,
+        retrievalNamespace: row.retrievalNamespace,
+        retrievalSource: row.retrievalSource,
+        comparisonKey: row.comparisonKey,
+        promptSnapshot: row.promptSnapshot,
+        chunkStrategySnapshot: row.chunkStrategySnapshot,
+        retrievalHits: row.retrievalHits,
+        latencyMs: row.latencyMs,
+        status: row.status,
+        errorCode: row.errorCode,
+        createdAt: row.createdAt,
+      })),
       limit,
       offset,
     };
   }
 
-  async findRunById(userId: string, runId: string): Promise<{
+  async findRunById(
+    userId: string,
+    runId: string,
+  ): Promise<{
     runId: string;
     runType: RagRunType;
     experimentId?: string;
@@ -438,7 +478,8 @@ export class RagDebugService {
     const nodeEnv = (process.env.NODE_ENV ?? '').trim().toLowerCase();
     const flag = (process.env.RAG_DEBUG_ENABLED ?? '').trim().toLowerCase();
     const enabledByFlag = flag === 'true' || flag === '1' || flag === 'yes';
-    const enabled = nodeEnv === 'development' || nodeEnv === 'test' || enabledByFlag;
+    const enabled =
+      nodeEnv === 'development' || nodeEnv === 'test' || enabledByFlag;
 
     if (!enabled) {
       throw new NotFoundException('Not Found');
@@ -450,7 +491,10 @@ export class RagDebugService {
     conversationId: string,
     limit: number,
   ): Promise<HistoryMessageItem[]> {
-    await this.conversationsService.ensureOwnedConversation(userId, conversationId);
+    await this.conversationsService.ensureOwnedConversation(
+      userId,
+      conversationId,
+    );
     const rows = await this.messageModel
       .find({
         userId: this.toObjectId(userId),
@@ -460,14 +504,12 @@ export class RagDebugService {
       .limit(limit)
       .exec();
 
-    return rows
-      .reverse()
-      .map(
-        (message): HistoryMessageItem => ({
-          role: message.role,
-          content: message.content,
-        }),
-      );
+    return rows.reverse().map(
+      (message): HistoryMessageItem => ({
+        role: message.role,
+        content: message.content,
+      }),
+    );
   }
 
   private async recordDebugRun(input: {
@@ -491,33 +533,6 @@ export class RagDebugService {
     errorCode?: string;
   }): Promise<void> {
     await this.ragRunRecorder.record(input);
-  }
-
-  private withCurrentQuery(
-    historyItems: HistoryMessageItem[],
-    query: string,
-  ): HistoryMessageItem[] {
-    const normalizedQuery = query.trim();
-    if (normalizedQuery.length === 0) {
-      return historyItems;
-    }
-
-    const lastItem = historyItems.at(-1);
-    if (
-      lastItem &&
-      lastItem.role === MessageRoleEnum.User &&
-      lastItem.content.trim() === normalizedQuery
-    ) {
-      return historyItems;
-    }
-
-    return [
-      ...historyItems,
-      {
-        role: MessageRoleEnum.User,
-        content: normalizedQuery,
-      },
-    ];
   }
 
   private resolveErrorCode(error: Error | HttpException): string {

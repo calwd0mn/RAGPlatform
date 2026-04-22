@@ -4,6 +4,10 @@ export interface KnowledgeBaseRecord {
   isDefault: boolean;
   activeChunkStrategyName?: string;
   activeChunkStrategyVersion?: string;
+  activeChunkSize?: number;
+  activeChunkOverlap?: number;
+  activeChunkSplitterType?: "recursive" | "markdown" | "token";
+  activeChunkPreserveSentenceBoundary?: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -80,7 +80,8 @@ describe('Delivery Smoke (e2e)', () => {
     originalNodeEnv = process.env.NODE_ENV;
     originalMongoUri = process.env.MONGODB_URI;
     originalDocumentsUploadDir = process.env.DOCUMENTS_UPLOAD_DIR;
-    originalIngestionEmbeddingsProvider = process.env.INGESTION_EMBEDDINGS_PROVIDER;
+    originalIngestionEmbeddingsProvider =
+      process.env.INGESTION_EMBEDDINGS_PROVIDER;
     originalRagRetrievalProvider = process.env.RAG_RETRIEVAL_PROVIDER;
     originalRagChatProvider = process.env.RAG_CHAT_PROVIDER;
     originalRagDebugEnabled = process.env.RAG_DEBUG_ENABLED;
@@ -88,9 +89,11 @@ describe('Delivery Smoke (e2e)', () => {
 
     process.env.NODE_ENV = 'test';
     process.env.MONGODB_URI =
-      process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/rag-platform-delivery-smoke-e2e';
+      process.env.MONGODB_URI ??
+      'mongodb://127.0.0.1:27017/rag-platform-delivery-smoke-e2e';
     process.env.DOCUMENTS_UPLOAD_DIR =
-      process.env.DOCUMENTS_UPLOAD_DIR ?? join(process.cwd(), 'uploads', 'delivery-smoke-e2e');
+      process.env.DOCUMENTS_UPLOAD_DIR ??
+      join(process.cwd(), 'uploads', 'delivery-smoke-e2e');
     process.env.INGESTION_EMBEDDINGS_PROVIDER = 'deterministic';
     process.env.RAG_RETRIEVAL_PROVIDER = 'local';
     process.env.RAG_CHAT_PROVIDER = 'fake';
@@ -149,7 +152,8 @@ describe('Delivery Smoke (e2e)', () => {
     if (originalIngestionEmbeddingsProvider === undefined) {
       delete process.env.INGESTION_EMBEDDINGS_PROVIDER;
     } else {
-      process.env.INGESTION_EMBEDDINGS_PROVIDER = originalIngestionEmbeddingsProvider;
+      process.env.INGESTION_EMBEDDINGS_PROVIDER =
+        originalIngestionEmbeddingsProvider;
     }
     if (originalRagRetrievalProvider === undefined) {
       delete process.env.RAG_RETRIEVAL_PROVIDER;
@@ -174,11 +178,13 @@ describe('Delivery Smoke (e2e)', () => {
   });
 
   async function registerAndGetToken(suffix: string): Promise<string> {
-    const response = await request(app.getHttpServer()).post('/auth/register').send({
-      email: `delivery-${suffix}@example.com`,
-      username: `delivery_${suffix}`,
-      password: 'Passw0rd!123',
-    });
+    const response = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: `delivery-${suffix}@example.com`,
+        username: `delivery_${suffix}`,
+        password: 'Passw0rd!123',
+      });
     const body = response.body as AuthResponseBody;
     return body.accessToken;
   }
@@ -193,7 +199,10 @@ describe('Delivery Smoke (e2e)', () => {
     return body.id;
   }
 
-  async function uploadDocument(token: string, suffix: string): Promise<string> {
+  async function uploadDocument(
+    token: string,
+    suffix: string,
+  ): Promise<string> {
     const response = await request(app.getHttpServer())
       .post('/documents/upload')
       .set('Authorization', `Bearer ${token}`)
@@ -252,7 +261,8 @@ describe('Delivery Smoke (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-debug-token', debugToken)
       .expect(200);
-    const promptCurrentBody = promptCurrentResponse.body as PromptCurrentResponseBody;
+    const promptCurrentBody =
+      promptCurrentResponse.body as PromptCurrentResponseBody;
     expect(promptCurrentBody.id.length).toBeGreaterThan(0);
     expect(promptCurrentBody.version.length).toBeGreaterThan(0);
     expect(promptCurrentBody.versionedId.length).toBeGreaterThan(0);

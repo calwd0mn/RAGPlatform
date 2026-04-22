@@ -1,0 +1,79 @@
+{
+  "headerFormat": "{type}{scope}: {emoji} {subject}",
+  "types": [
+    {
+      "name": "feat",
+      "description": "✨  新增功能 (feat)",
+      "value": "feat",
+      "emoji": "✨"
+    },
+    {
+      "name": "fix",
+      "description": "🐛  修复缺陷 (fix)",
+      "value": "fix",
+      "emoji": "🐛"
+    },
+    {
+      "name": "docs",
+      "description": "📝  文档更新 (docs)",
+      "value": "docs",
+      "emoji": "📝"
+    },
+    {
+      "name": "style",
+      "description": "💄  代码格式 (不影响代码运行的变动，空格、格式化等)",
+      "value": "style",
+      "emoji": "💄"
+    },
+    {
+      "name": "refactor",
+      "description": "♻️  代码重构 (既不是新增功能，也不是修复缺陷的代码变动)",
+      "value": "refactor",
+      "emoji": "♻️"
+    },
+    {
+      "name": "perf",
+      "description": "⚡️  性能优化",
+      "value": "perf",
+      "emoji": "⚡️"
+    },
+    {
+      "name": "test",
+      "description": "✅  测试相关 (增加测试，或修改现有的测试)",
+      "value": "test",
+      "emoji": "✅"
+    },
+    {
+      "name": "build",
+      "description": "📦️  构建相关 (打包配置、依赖包调整等)",
+      "value": "build",
+      "emoji": "📦️"
+    },
+    {
+      "name": "ci",
+      "description": "🎡  持续集成 (CI 配置文件和脚本的更改)",
+      "value": "ci",
+      "emoji": "🎡"
+    },
+    {
+      "name": "chore",
+      "description": "🔨  其他修改 (不在上述类型中的杂项修改，比如工程配置)",
+      "value": "chore",
+      "emoji": "🔨"
+    },
+    {
+      "name": "revert",
+      "description": "⏪️  回滚代码",
+      "value": "revert",
+      "emoji": "⏪️"
+    }
+  ],
+  "messages": {
+    "type": "请选择你要提交的更改类型：",
+    "scope": "请填写更改的影响范围 (例如：组件或文件名称) (可选)：",
+    "subject": "请简明扼要地描述更改 (必填，最多 90 个字符)：",
+    "body": "请提供更详细的更改说明，可以多行 (可选)：\n",
+    "breaking": "列出所有的破坏性变更 (如无，请直接回车跳过) (可选)：\n",
+    "issues": "列出本次更改修复或关联的 issues编号 (如：#123, #124) (可选)：\n"
+  }
+}

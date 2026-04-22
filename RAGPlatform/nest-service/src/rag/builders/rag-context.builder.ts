@@ -11,8 +11,11 @@ export class RagContextBuilder {
     return chunks
       .map((chunk, index): string => {
         const page =
-          chunk.metadata.page === undefined ? 'unknown' : `${chunk.metadata.page}`;
-        const docName = chunk.metadata.originalName ?? chunk.metadata.source ?? 'unknown';
+          chunk.metadata.page === undefined
+            ? 'unknown'
+            : `${chunk.metadata.page}`;
+        const docName =
+          chunk.metadata.originalName ?? chunk.metadata.source ?? 'unknown';
         const order =
           chunk.chunkIndex === undefined ? 'unknown' : `${chunk.chunkIndex}`;
         return [

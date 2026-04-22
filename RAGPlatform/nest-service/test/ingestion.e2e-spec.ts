@@ -7,7 +7,10 @@ import { join } from 'path';
 import { Connection, Model, Types } from 'mongoose';
 import request from 'supertest';
 import { DocumentStatusEnum } from '../src/documents/interfaces/document-status.type';
-import { Document, DocumentDocument } from '../src/documents/schemas/document.schema';
+import {
+  Document,
+  DocumentDocument,
+} from '../src/documents/schemas/document.schema';
 import { IngestionEmbeddingsFactory } from '../src/ingestion/embeddings/embeddings.factory';
 import { Chunk, ChunkDocument } from '../src/ingestion/schemas/chunk.schema';
 
@@ -36,9 +39,11 @@ describe('Ingestion (e2e)', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.MONGODB_URI =
-      process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/rag-platform-ingestion-e2e';
+      process.env.MONGODB_URI ??
+      'mongodb://127.0.0.1:27017/rag-platform-ingestion-e2e';
     process.env.DOCUMENTS_UPLOAD_DIR =
-      process.env.DOCUMENTS_UPLOAD_DIR ?? join(process.cwd(), 'uploads', 'ingestion-e2e');
+      process.env.DOCUMENTS_UPLOAD_DIR ??
+      join(process.cwd(), 'uploads', 'ingestion-e2e');
     process.env.INGESTION_EMBEDDINGS_PROVIDER = 'deterministic';
     documentsUploadDir = process.env.DOCUMENTS_UPLOAD_DIR;
 
@@ -59,9 +64,13 @@ describe('Ingestion (e2e)', () => {
 
     await app.init();
     connection = app.get<Connection>(getConnectionToken());
-    documentModel = app.get<Model<DocumentDocument>>(getModelToken(Document.name));
+    documentModel = app.get<Model<DocumentDocument>>(
+      getModelToken(Document.name),
+    );
     chunkModel = app.get<Model<ChunkDocument>>(getModelToken(Chunk.name));
-    ingestionEmbeddingsFactory = app.get<IngestionEmbeddingsFactory>(IngestionEmbeddingsFactory);
+    ingestionEmbeddingsFactory = app.get<IngestionEmbeddingsFactory>(
+      IngestionEmbeddingsFactory,
+    );
   });
 
   beforeEach(async () => {
@@ -79,19 +88,42 @@ describe('Ingestion (e2e)', () => {
     const username = `ing_user_${suffix}`;
     const password = 'Passw0rd!123';
 
-    const response = await request(app.getHttpServer()).post('/auth/register').send({
-      email,
-      username,
-      password,
-    });
+    const response = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email,
+        username,
+        password,
+      });
 
     return response.body.accessToken as string;
   }
 
-  async function uploadTextDocument(token: string, filename: string, content: string): Promise<string> {
+  async function createKnowledgeBase(
+    token: string,
+    suffix: string,
+  ): Promise<string> {
+    const response = await request(app.getHttpServer())
+      .post('/knowledge-bases')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `kb-${suffix}`,
+      })
+      .expect(201);
+
+    return response.body.id as string;
+  }
+
+  async function uploadTextDocument(
+    token: string,
+    knowledgeBaseId: string,
+    filename: string,
+    content: string,
+  ): Promise<string> {
     const response = await request(app.getHttpServer())
       .post('/documents/upload')
       .set('Authorization', `Bearer ${token}`)
+      .field('knowledgeBaseId', knowledgeBaseId)
       .attach('file', Buffer.from(content), {
         filename,
         contentType: 'text/plain',
@@ -103,8 +135,13 @@ describe('Ingestion (e2e)', () => {
 
   it('allows user to ingest own uploaded document and persists chunks', async () => {
     const token = await registerAndGetToken(`ok-${Date.now()}`);
+    const knowledgeBaseId = await createKnowledgeBase(
+      token,
+      `ok-${Date.now()}`,
+    );
     const documentId = await uploadTextDocument(
       token,
+      knowledgeBaseId,
       'ing-success.txt',
       'Line1\nLine2\nLine3\nLine4\nLine5\nLine6\nLine7\nLine8\nLine9\nLine10',
     );
@@ -121,7 +158,9 @@ describe('Ingestion (e2e)', () => {
     const savedDocument = await documentModel.findById(documentId).exec();
     expect(savedDocument?.status).toBe(DocumentStatusEnum.Ready);
 
-    const persistedChunks = await chunkModel.find({ documentId: new Types.ObjectId(documentId) }).exec();
+    const persistedChunks = await chunkModel
+      .find({ documentId: new Types.ObjectId(documentId) })
+      .exec();
     expect(persistedChunks.length).toBeGreaterThan(0);
   });
 
@@ -129,7 +168,16 @@ describe('Ingestion (e2e)', () => {
     const base = Date.now();
     const ownerToken = await registerAndGetToken(`owner-${base}`);
     const otherToken = await registerAndGetToken(`other-${base}`);
-    const documentId = await uploadTextDocument(ownerToken, 'owner.txt', 'private content');
+    const ownerKnowledgeBaseId = await createKnowledgeBase(
+      ownerToken,
+      `owner-${base}`,
+    );
+    const documentId = await uploadTextDocument(
+      ownerToken,
+      ownerKnowledgeBaseId,
+      'owner.txt',
+      'private content',
+    );
 
     await request(app.getHttpServer())
       .post(`/ingestion/${documentId}/start`)
@@ -139,7 +187,16 @@ describe('Ingestion (e2e)', () => {
 
   it('rejects ingestion when status is not startable', async () => {
     const token = await registerAndGetToken(`status-${Date.now()}`);
-    const documentId = await uploadTextDocument(token, 'already-ready.txt', 'ready-ready-ready');
+    const knowledgeBaseId = await createKnowledgeBase(
+      token,
+      `status-${Date.now()}`,
+    );
+    const documentId = await uploadTextDocument(
+      token,
+      knowledgeBaseId,
+      'already-ready.txt',
+      'ready-ready-ready',
+    );
 
     await request(app.getHttpServer())
       .post(`/ingestion/${documentId}/start`)
@@ -154,7 +211,16 @@ describe('Ingestion (e2e)', () => {
 
   it('marks document failed and writes errorMessage when embeddings step fails', async () => {
     const token = await registerAndGetToken(`fail-${Date.now()}`);
-    const documentId = await uploadTextDocument(token, 'embedding-fail.txt', 'embedding fail content');
+    const knowledgeBaseId = await createKnowledgeBase(
+      token,
+      `fail-${Date.now()}`,
+    );
+    const documentId = await uploadTextDocument(
+      token,
+      knowledgeBaseId,
+      'embedding-fail.txt',
+      'embedding fail content',
+    );
 
     jest
       .spyOn(ingestionEmbeddingsFactory, 'createEmbeddings')
@@ -172,8 +238,13 @@ describe('Ingestion (e2e)', () => {
 
   it('cleans old chunks when retrying failed document ingestion', async () => {
     const token = await registerAndGetToken(`retry-${Date.now()}`);
+    const knowledgeBaseId = await createKnowledgeBase(
+      token,
+      `retry-${Date.now()}`,
+    );
     const documentId = await uploadTextDocument(
       token,
+      knowledgeBaseId,
       'retry.txt',
       'chunk-a\nchunk-b\nchunk-c\nchunk-d\nchunk-e\nchunk-f',
     );
@@ -186,11 +257,16 @@ describe('Ingestion (e2e)', () => {
     expect(firstRunResponse.body.chunkCount).toBeGreaterThan(0);
 
     await documentModel
-      .updateOne({ _id: new Types.ObjectId(documentId) }, { status: DocumentStatusEnum.Failed })
+      .updateOne(
+        { _id: new Types.ObjectId(documentId) },
+        { status: DocumentStatusEnum.Failed },
+      )
       .exec();
 
+    const document = await documentModel.findById(documentId).exec();
     await chunkModel.create({
-      userId: new Types.ObjectId((await documentModel.findById(documentId).exec())!.userId),
+      userId: new Types.ObjectId(document!.userId),
+      knowledgeBaseId: new Types.ObjectId(document!.knowledgeBaseId),
       documentId: new Types.ObjectId(documentId),
       chunkIndex: 999,
       content: 'stale-chunk',
@@ -209,13 +285,22 @@ describe('Ingestion (e2e)', () => {
       .exec();
 
     expect(chunksAfterRetry.length).toBe(retryResponse.body.chunkCount);
-    expect(chunksAfterRetry.some((chunk): boolean => chunk.content === 'stale-chunk')).toBe(false);
+    expect(
+      chunksAfterRetry.some(
+        (chunk): boolean => chunk.content === 'stale-chunk',
+      ),
+    ).toBe(false);
   });
 
   it('allows only one concurrent ingestion start for the same document', async () => {
     const token = await registerAndGetToken(`race-${Date.now()}`);
+    const knowledgeBaseId = await createKnowledgeBase(
+      token,
+      `race-${Date.now()}`,
+    );
     const documentId = await uploadTextDocument(
       token,
+      knowledgeBaseId,
       'race.txt',
       'race-1\nrace-2\nrace-3\nrace-4\nrace-5',
     );
@@ -229,7 +314,9 @@ describe('Ingestion (e2e)', () => {
         .set('Authorization', `Bearer ${token}`),
     ]);
 
-    const statusCodes = [responseA.status, responseB.status].sort((a, b): number => a - b);
+    const statusCodes = [responseA.status, responseB.status].sort(
+      (a, b): number => a - b,
+    );
     expect(statusCodes).toEqual([201, 409]);
   });
 

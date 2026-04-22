@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { Document } from '../../documents/schemas/document.schema';
 import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { Chunk } from '../../ingestion/schemas/chunk.schema';
+import { DebugExperimentChunk } from '../../schemas/debug-experiment-chunk.schema';
 import { ChunksService } from './chunks.service';
 
 class StaticEmbeddings extends Embeddings {
@@ -22,7 +23,7 @@ class StaticEmbeddings extends Embeddings {
 }
 
 interface TestChunkRow {
-  id: string;
+  _id: Types.ObjectId;
   documentId: Types.ObjectId;
   chunkIndex: number;
   content: string;
@@ -40,6 +41,10 @@ describe('ChunksService', () => {
     find: jest.Mock;
     countDocuments: jest.Mock;
   };
+  let debugExperimentChunkModelMock: {
+    find: jest.Mock;
+    countDocuments: jest.Mock;
+  };
   let documentModelMock: {
     find: jest.Mock;
   };
@@ -49,6 +54,10 @@ describe('ChunksService', () => {
 
   beforeEach(async () => {
     chunkModelMock = {
+      find: jest.fn(),
+      countDocuments: jest.fn(),
+    };
+    debugExperimentChunkModelMock = {
       find: jest.fn(),
       countDocuments: jest.fn(),
     };
@@ -71,6 +80,10 @@ describe('ChunksService', () => {
           useValue: documentModelMock,
         },
         {
+          provide: getModelToken(DebugExperimentChunk.name),
+          useValue: debugExperimentChunkModelMock,
+        },
+        {
           provide: IngestionEmbeddingsFactory,
           useValue: embeddingsFactoryMock,
         },
@@ -84,13 +97,14 @@ describe('ChunksService', () => {
     const documentId = new Types.ObjectId();
     const capturedQueries: Array<{
       userId: Types.ObjectId;
+      knowledgeBaseId: Types.ObjectId;
       documentId?: Types.ObjectId;
       'metadata.page'?: number;
       content?: { $regex: string; $options: string };
     }> = [];
     const rows: TestChunkRow[] = [
       {
-        id: new Types.ObjectId().toString(),
+        _id: new Types.ObjectId(),
         documentId,
         chunkIndex: 3,
         content: 'chunk content',
@@ -105,6 +119,7 @@ describe('ChunksService', () => {
     chunkModelMock.find.mockImplementation(
       (query: {
         userId: Types.ObjectId;
+        knowledgeBaseId: Types.ObjectId;
         documentId?: Types.ObjectId;
         'metadata.page'?: number;
         content?: { $regex: string; $options: string };
@@ -130,7 +145,7 @@ describe('ChunksService', () => {
       select: jest.fn(() => ({
         exec: jest.fn(async () => [
           {
-            id: documentId.toString(),
+            _id: documentId,
             originalName: 'manual.pdf',
           },
         ]),
@@ -139,6 +154,7 @@ describe('ChunksService', () => {
 
     const response = await service.findDebugChunks({
       userId: new Types.ObjectId().toString(),
+      knowledgeBaseId: new Types.ObjectId().toString(),
       keyword: 'a+b',
       query: 'test query',
       limit: 10,
@@ -158,7 +174,7 @@ describe('ChunksService', () => {
     const documentId = new Types.ObjectId();
     const rows: TestChunkRow[] = [
       {
-        id: new Types.ObjectId().toString(),
+        _id: new Types.ObjectId(),
         documentId,
         chunkIndex: 0,
         content: 'another chunk',
@@ -188,7 +204,7 @@ describe('ChunksService', () => {
       select: jest.fn(() => ({
         exec: jest.fn(async () => [
           {
-            id: documentId.toString(),
+            _id: documentId,
             originalName: 'doc.pdf',
           },
         ]),
@@ -197,6 +213,7 @@ describe('ChunksService', () => {
 
     const response = await service.findDebugChunks({
       userId: new Types.ObjectId().toString(),
+      knowledgeBaseId: new Types.ObjectId().toString(),
       limit: 10,
       offset: 0,
     });

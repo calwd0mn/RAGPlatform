@@ -7,6 +7,7 @@ import {
   DebugExperimentChunkDocument,
 } from '../../../schemas/debug-experiment-chunk.schema';
 import { RetrievedChunk } from '../../interfaces/retrieved-chunk.interface';
+import { cosineSimilarity } from '../utils/cosine-similarity.util';
 
 interface ExperimentChunkCandidateDocument {
   _id: Types.ObjectId;
@@ -47,7 +48,13 @@ export class DebugExperimentRetrievalProvider {
         strategyName: input.strategyName,
       })
       .sort({ createdAt: -1 })
-      .select({ _id: 1, documentId: 1, chunkIndex: 1, embedding: 1, metadata: 1 })
+      .select({
+        _id: 1,
+        documentId: 1,
+        chunkIndex: 1,
+        embedding: 1,
+        metadata: 1,
+      })
       .lean<ExperimentChunkCandidateDocument[]>()
       .exec();
 
@@ -57,39 +64,21 @@ export class DebugExperimentRetrievalProvider {
 
     const topCandidates = candidates
       .map(
-        (
-          candidate,
-        ): {
-          chunkId: string;
-          documentId: string;
-          chunkIndex: number;
-          score: number;
-          metadata: ChunkMetadata;
-        } | null => {
-          const score = this.cosineSimilarity(input.queryEmbedding, candidate.embedding);
-          if (!Number.isFinite(score)) {
-            return null;
-          }
-
-          return {
-            chunkId: candidate._id.toString(),
-            documentId: candidate.documentId.toString(),
-            chunkIndex: candidate.chunkIndex,
-            score,
-            metadata: candidate.metadata,
-          };
-        },
-      )
-      .filter(
-        (
-          candidate,
-        ): candidate is {
-          chunkId: string;
-          documentId: string;
-          chunkIndex: number;
-          score: number;
-          metadata: ChunkMetadata;
-        } => candidate !== null,
+        (candidate): {
+        chunkId: string;
+        documentId: string;
+        chunkIndex: number;
+        score: number;
+        metadata: ChunkMetadata;
+      } => {
+        return {
+          chunkId: candidate._id.toString(),
+          documentId: candidate.documentId.toString(),
+          chunkIndex: candidate.chunkIndex,
+          score: cosineSimilarity(input.queryEmbedding, candidate.embedding),
+          metadata: candidate.metadata,
+        };
+      },
       )
       .sort((left, right): number => right.score - left.score)
       .slice(0, input.topK);
@@ -114,7 +103,10 @@ export class DebugExperimentRetrievalProvider {
       .exec();
 
     const contentMap = new Map<string, string>(
-      contentRows.map((row): [string, string] => [row._id.toString(), row.content]),
+      contentRows.map((row): [string, string] => [
+        row._id.toString(),
+        row.content,
+      ]),
     );
 
     return topCandidates
@@ -134,30 +126,6 @@ export class DebugExperimentRetrievalProvider {
         };
       })
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
-  }
-
-  private cosineSimilarity(left: number[], right: number[]): number {
-    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
-      return Number.NaN;
-    }
-
-    let dotProduct = 0;
-    let leftNorm = 0;
-    let rightNorm = 0;
-
-    for (let index = 0; index < left.length; index += 1) {
-      const leftValue = left[index];
-      const rightValue = right[index];
-      dotProduct += leftValue * rightValue;
-      leftNorm += leftValue * leftValue;
-      rightNorm += rightValue * rightValue;
-    }
-
-    if (leftNorm === 0 || rightNorm === 0) {
-      return Number.NaN;
-    }
-
-    return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
   }
 
   private toObjectId(value: string): Types.ObjectId {

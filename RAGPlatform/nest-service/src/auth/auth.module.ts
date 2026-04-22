@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { getJwtExpiresInSeconds, getJwtSecret } from './jwt.config';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
+// 官方标准实现方法
 @Module({
   imports: [
     UsersModule,

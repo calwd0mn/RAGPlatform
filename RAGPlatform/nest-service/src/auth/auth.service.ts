@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+ import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
@@ -27,8 +31,8 @@ export class AuthService {
     const normalizedUsername = dto.username.trim();
 
     const [emailUsed, usernameUsed] = await Promise.all([
-      this.usersService.findByEmail(normalizedEmail),
-      this.usersService.findByUsername(normalizedUsername),
+      this.usersService.findByEmail(normalizedEmail), // 基于MongoModel构造的函数
+      this.usersService.findByUsername(normalizedUsername), // same
     ]);
 
     if (emailUsed) {
@@ -38,7 +42,7 @@ export class AuthService {
       throw new BadRequestException('Username already exists');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10); // hash加密
     const user = await this.usersService
       .create({
         username: normalizedUsername,

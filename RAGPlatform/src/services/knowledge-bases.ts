@@ -7,8 +7,25 @@ interface KnowledgeBaseResponse {
   isDefault: boolean;
   activeChunkStrategyName?: string;
   activeChunkStrategyVersion?: string;
+  activeChunkSize?: number;
+  activeChunkOverlap?: number;
+  activeChunkSplitterType?: "recursive" | "markdown" | "token";
+  activeChunkPreserveSentenceBoundary?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UpdateKnowledgeBaseSettingsPayload {
+  name?: string;
+  clearActiveChunkStrategy?: boolean;
+  chunkStrategy?: {
+    name?: string;
+    version?: string;
+    chunkSize: number;
+    chunkOverlap: number;
+    splitterType?: "recursive" | "markdown" | "token";
+    preserveSentenceBoundary?: boolean;
+  };
 }
 
 function formatDateTime(value: string): string {
@@ -28,6 +45,11 @@ function toKnowledgeBaseRecord(
     isDefault: response.isDefault,
     activeChunkStrategyName: response.activeChunkStrategyName,
     activeChunkStrategyVersion: response.activeChunkStrategyVersion,
+    activeChunkSize: response.activeChunkSize,
+    activeChunkOverlap: response.activeChunkOverlap,
+    activeChunkSplitterType: response.activeChunkSplitterType,
+    activeChunkPreserveSentenceBoundary:
+      response.activeChunkPreserveSentenceBoundary,
     createdAt: formatDateTime(response.createdAt),
     updatedAt: formatDateTime(response.updatedAt),
   };
@@ -38,8 +60,12 @@ export async function getKnowledgeBases(): Promise<KnowledgeBaseRecord[]> {
   return response.data.map(toKnowledgeBaseRecord);
 }
 
-export async function createKnowledgeBase(name: string): Promise<KnowledgeBaseRecord> {
-  const response = await http.post<KnowledgeBaseResponse>("/knowledge-bases", { name });
+export async function createKnowledgeBase(
+  name: string,
+): Promise<KnowledgeBaseRecord> {
+  const response = await http.post<KnowledgeBaseResponse>("/knowledge-bases", {
+    name,
+  });
   return toKnowledgeBaseRecord(response.data);
 }
 
@@ -49,11 +75,26 @@ export async function updateKnowledgeBase(
 ): Promise<KnowledgeBaseRecord> {
   const response = await http.patch<KnowledgeBaseResponse>(
     `/knowledge-bases/${knowledgeBaseId}`,
-    { name },
+    {
+      name,
+    },
   );
   return toKnowledgeBaseRecord(response.data);
 }
 
-export async function deleteKnowledgeBase(knowledgeBaseId: string): Promise<void> {
+export async function updateKnowledgeBaseSettings(
+  knowledgeBaseId: string,
+  payload: UpdateKnowledgeBaseSettingsPayload,
+): Promise<KnowledgeBaseRecord> {
+  const response = await http.patch<KnowledgeBaseResponse>(
+    `/knowledge-bases/${knowledgeBaseId}`,
+    payload,
+  );
+  return toKnowledgeBaseRecord(response.data);
+}
+
+export async function deleteKnowledgeBase(
+  knowledgeBaseId: string,
+): Promise<void> {
   await http.delete(`/knowledge-bases/${knowledgeBaseId}`);
 }

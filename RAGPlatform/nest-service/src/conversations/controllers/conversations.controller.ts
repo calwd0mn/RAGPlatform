@@ -29,7 +29,7 @@ export class ConversationsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body() dto: CreateConversationDto,
+    @Body() dto: CreateConversationDto, // 获取请求体JSON
   ): Promise<ConversationResponse> {
     return this.conversationsService.create(user.id, dto);
   }
@@ -37,15 +37,18 @@ export class ConversationsController {
   @Get()
   findAll(
     @CurrentUser() user: AuthUser,
-    @Query() query: ListConversationsQueryDto,
+    @Query() query: ListConversationsQueryDto, // 查找参数 conversations/search?queryName=QueryValue
   ): Promise<ConversationResponse[]> {
-    return this.conversationsService.findAllByUser(user.id, query.knowledgeBaseId);
+    return this.conversationsService.findAllByUser(
+      user.id,
+      query.knowledgeBaseId,
+    );
   }
 
   @Get(':id')
   findOne(
     @CurrentUser() user: AuthUser,
-    @Param() params: ConversationIdParamDto,
+    @Param() params: ConversationIdParamDto, // 定位 conversations/:id => conversations/123321 => return 123321
   ): Promise<ConversationResponse> {
     return this.conversationsService.findOneByUser(user.id, params.id);
   }
@@ -61,7 +64,10 @@ export class ConversationsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@CurrentUser() user: AuthUser, @Param() params: ConversationIdParamDto): Promise<void> {
+  remove(
+    @CurrentUser() user: AuthUser,
+    @Param() params: ConversationIdParamDto,
+  ): Promise<void> {
     return this.conversationsService.remove(user.id, params.id);
   }
 }

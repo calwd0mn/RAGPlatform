@@ -29,6 +29,7 @@ describe('LocalCosineRetrievalProvider', () => {
   it('returns topK chunks sorted by cosine score and keeps userId isolation', async () => {
     process.env.RAG_VECTOR_CANDIDATE_LIMIT = '20';
     const ownerUserId = new Types.ObjectId('507f191e810c19729de860ea');
+    const knowledgeBaseId = new Types.ObjectId('507f191e810c19729de860ec');
 
     const candidates = [
       {
@@ -63,6 +64,7 @@ describe('LocalCosineRetrievalProvider', () => {
 
     const findMock = jest.fn((filter: {
       userId?: Types.ObjectId;
+      knowledgeBaseId?: Types.ObjectId;
       _id?: { $in: Types.ObjectId[] };
     }) => {
       if (filter._id) {
@@ -94,6 +96,7 @@ describe('LocalCosineRetrievalProvider', () => {
 
     const result = await provider.retrieveTopKByUser(
       ownerUserId.toString(),
+      knowledgeBaseId.toString(),
       [1, 0],
       2,
     );
@@ -102,14 +105,24 @@ describe('LocalCosineRetrievalProvider', () => {
     expect(result[0].content).toBe('chunk-a');
     expect(result[0].score).toBeGreaterThan(result[1].score);
 
-    const firstFindFilter = findMock.mock.calls[0][0] as { userId: Types.ObjectId };
+    const firstFindFilter = findMock.mock.calls[0][0] as {
+      userId: Types.ObjectId;
+      knowledgeBaseId: Types.ObjectId;
+    };
     expect(firstFindFilter.userId.toString()).toBe(ownerUserId.toString());
+    expect(firstFindFilter.knowledgeBaseId.toString()).toBe(
+      knowledgeBaseId.toString(),
+    );
 
     const secondFindFilter = findMock.mock.calls[1][0] as {
       userId: Types.ObjectId;
+      knowledgeBaseId: Types.ObjectId;
       _id: { $in: Types.ObjectId[] };
     };
     expect(secondFindFilter.userId.toString()).toBe(ownerUserId.toString());
+    expect(secondFindFilter.knowledgeBaseId.toString()).toBe(
+      knowledgeBaseId.toString(),
+    );
     expect(secondFindFilter._id.$in).toHaveLength(2);
   });
 
@@ -129,7 +142,12 @@ describe('LocalCosineRetrievalProvider', () => {
     } as never);
 
     await expect(
-      provider.retrieveTopKByUser('invalid-id', [0.1, 0.2], 3),
+      provider.retrieveTopKByUser(
+        'invalid-id',
+        '507f191e810c19729de860ec',
+        [0.1, 0.2],
+        3,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 });

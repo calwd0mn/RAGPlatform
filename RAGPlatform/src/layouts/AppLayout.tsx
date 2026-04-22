@@ -1,5 +1,6 @@
 import {
   BugOutlined,
+  ExperimentOutlined,
   FileTextOutlined,
   LogoutOutlined,
   MessageOutlined,
@@ -26,8 +27,10 @@ export function AppLayout() {
   const activeTabKey =
     location.pathname.startsWith("/app/documents")
       ? "/app/documents"
-      : location.pathname.startsWith("/app/debug")
-        ? "/app/debug"
+      : location.pathname.startsWith("/app/debug/results")
+        ? "/app/debug/results"
+        : location.pathname.startsWith("/app/debug")
+          ? "/app/debug"
         : "/app/chat";
 
   return (
@@ -69,7 +72,16 @@ export function AppLayout() {
               label: (
                 <Space size={6}>
                   <BugOutlined />
-                  调试
+                  策略设置
+                </Space>
+              ),
+            },
+            {
+              key: "/app/debug/results",
+              label: (
+                <Space size={6}>
+                  <ExperimentOutlined />
+                  RAG 调试
                 </Space>
               ),
             },

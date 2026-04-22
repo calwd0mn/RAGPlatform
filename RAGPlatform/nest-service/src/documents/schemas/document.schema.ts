@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { DOCUMENT_STATUSES, DocumentStatus } from '../interfaces/document-status.type';
+import {
+  DOCUMENT_STATUSES,
+  DocumentStatus,
+} from '../interfaces/document-status.type';
 
 export type DocumentDocument = HydratedDocument<Document>;
 
@@ -41,6 +44,18 @@ export class Document {
 
   @Prop({ required: false, trim: true, maxlength: 120 })
   activeChunkStrategyVersion?: string;
+
+  @Prop({ required: false, min: 50, max: 8000 })
+  activeChunkSize?: number;
+
+  @Prop({ required: false, min: 0, max: 4000 })
+  activeChunkOverlap?: number;
+
+  @Prop({ required: false, enum: ['recursive', 'markdown', 'token'] })
+  activeChunkSplitterType?: 'recursive' | 'markdown' | 'token';
+
+  @Prop({ required: false, default: false })
+  activeChunkPreserveSentenceBoundary?: boolean;
 
   createdAt!: Date;
   updatedAt!: Date;

@@ -7,8 +7,15 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Conversation, ConversationDocument } from '../conversations/schemas/conversation.schema';
-import { Document, DocumentDocument } from '../documents/schemas/document.schema';
+import { ChunkSplitterType } from '../ingestion/chunk-strategy/chunk-strategy.types';
+import {
+  Conversation,
+  ConversationDocument,
+} from '../conversations/schemas/conversation.schema';
+import {
+  Document,
+  DocumentDocument,
+} from '../documents/schemas/document.schema';
 import { Chunk, ChunkDocument } from '../ingestion/schemas/chunk.schema';
 import {
   DebugExperiment,
@@ -88,23 +95,63 @@ export class KnowledgeBasesService {
   ): Promise<KnowledgeBaseResponse> {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
-    const name = dto.name.trim();
 
-    const existing = await this.knowledgeBaseModel
-      .findOne({
-        userId: normalizedUserId,
-        name,
-        _id: { $ne: normalizedKnowledgeBaseId },
-      })
-      .exec();
-    if (existing) {
-      throw new ConflictException('Knowledge base name already exists');
+    const updatePayload: Record<string, unknown> = {};
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      const existing = await this.knowledgeBaseModel
+        .findOne({
+          userId: normalizedUserId,
+          name,
+          _id: { $ne: normalizedKnowledgeBaseId },
+        })
+        .exec();
+      if (existing) {
+        throw new ConflictException('Knowledge base name already exists');
+      }
+      updatePayload.name = name;
+    }
+
+    if (dto.clearActiveChunkStrategy) {
+      updatePayload.activeChunkStrategyName = undefined;
+      updatePayload.activeChunkStrategyVersion = undefined;
+      updatePayload.activeChunkSize = undefined;
+      updatePayload.activeChunkOverlap = undefined;
+      updatePayload.activeChunkSplitterType = undefined;
+      updatePayload.activeChunkPreserveSentenceBoundary = undefined;
+    } else if (dto.chunkStrategy) {
+      const strategyName = dto.chunkStrategy.name?.trim() || 'kb-manual';
+      const strategyVersion = dto.chunkStrategy.version?.trim() || 'v1';
+      if (dto.chunkStrategy.chunkOverlap >= dto.chunkStrategy.chunkSize) {
+        throw new BadRequestException(
+          'chunkOverlap must be smaller than chunkSize',
+        );
+      }
+
+      updatePayload.activeChunkStrategyName = strategyName;
+      updatePayload.activeChunkStrategyVersion = strategyVersion;
+      updatePayload.activeChunkSize = dto.chunkStrategy.chunkSize;
+      updatePayload.activeChunkOverlap = dto.chunkStrategy.chunkOverlap;
+      updatePayload.activeChunkSplitterType =
+        dto.chunkStrategy.splitterType ?? 'recursive';
+      updatePayload.activeChunkPreserveSentenceBoundary =
+        dto.chunkStrategy.preserveSentenceBoundary ?? false;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      const existingKnowledgeBase = await this.knowledgeBaseModel
+        .findOne({ _id: normalizedKnowledgeBaseId, userId: normalizedUserId })
+        .exec();
+      if (!existingKnowledgeBase) {
+        throw new NotFoundException('Knowledge base not found');
+      }
+      return this.toResponse(existingKnowledgeBase);
     }
 
     const updated = await this.knowledgeBaseModel
       .findOneAndUpdate(
         { _id: normalizedKnowledgeBaseId, userId: normalizedUserId },
-        { name },
+        updatePayload,
         { new: true },
       )
       .exec();
@@ -117,7 +164,10 @@ export class KnowledgeBasesService {
   }
 
   async remove(userId: string, knowledgeBaseId: string): Promise<void> {
-    const row = await this.findOwnedKnowledgeBaseDocument(userId, knowledgeBaseId);
+    const row = await this.findOwnedKnowledgeBaseDocument(
+      userId,
+      knowledgeBaseId,
+    );
     if (row.isDefault) {
       throw new BadRequestException('Default knowledge base cannot be deleted');
     }
@@ -165,7 +215,17 @@ export class KnowledgeBasesService {
       debugExperimentCount > 0 ||
       debugExperimentChunkCount > 0
     ) {
-      throw new BadRequestException('Knowledge base is not empty');
+      throw new BadRequestException(
+        [
+          'Knowledge base is not empty',
+          `documents=${documentCount}`,
+          `chunks=${chunkCount}`,
+          `conversations=${conversationCount}`,
+          `ragRuns=${ragRunCount}`,
+          `debugExperiments=${debugExperimentCount}`,
+          `debugExperimentChunks=${debugExperimentChunkCount}`,
+        ].join('; '),
+      );
     }
 
     await this.knowledgeBaseModel.deleteOne({ _id: row._id }).exec();
@@ -175,11 +235,16 @@ export class KnowledgeBasesService {
     userId: string,
     knowledgeBaseId: string,
   ): Promise<KnowledgeBaseResponse> {
-    const row = await this.findOwnedKnowledgeBaseDocument(userId, knowledgeBaseId);
+    const row = await this.findOwnedKnowledgeBaseDocument(
+      userId,
+      knowledgeBaseId,
+    );
     return this.toResponse(row);
   }
 
-  async ensureDefaultKnowledgeBase(userId: string): Promise<KnowledgeBaseDocument> {
+  async ensureDefaultKnowledgeBase(
+    userId: string,
+  ): Promise<KnowledgeBaseDocument> {
     const normalizedUserId = this.toObjectId(userId);
     const existing = await this.knowledgeBaseModel
       .findOne({ userId: normalizedUserId, isDefault: true })
@@ -198,7 +263,10 @@ export class KnowledgeBasesService {
     return created;
   }
 
-  async assertOwnedKnowledgeBase(userId: string, knowledgeBaseId: string): Promise<void> {
+  async assertOwnedKnowledgeBase(
+    userId: string,
+    knowledgeBaseId: string,
+  ): Promise<void> {
     await this.findOwnedKnowledgeBaseDocument(userId, knowledgeBaseId);
   }
 
@@ -207,6 +275,10 @@ export class KnowledgeBasesService {
     knowledgeBaseId: string;
     strategyName: string;
     strategyVersion?: string;
+    chunkSize?: number;
+    chunkOverlap?: number;
+    splitterType?: ChunkSplitterType;
+    preserveSentenceBoundary?: boolean;
   }): Promise<void> {
     await this.knowledgeBaseModel
       .updateOne(
@@ -217,6 +289,10 @@ export class KnowledgeBasesService {
         {
           activeChunkStrategyName: input.strategyName,
           activeChunkStrategyVersion: input.strategyVersion,
+          activeChunkSize: input.chunkSize,
+          activeChunkOverlap: input.chunkOverlap,
+          activeChunkSplitterType: input.splitterType,
+          activeChunkPreserveSentenceBoundary: input.preserveSentenceBoundary,
         },
       )
       .exec();
@@ -264,7 +340,9 @@ export class KnowledgeBasesService {
         )
         .exec(),
     ]).catch(() => {
-      throw new InternalServerErrorException('Failed to backfill knowledge base data');
+      throw new InternalServerErrorException(
+        'Failed to backfill knowledge base data',
+      );
     });
   }
 
@@ -299,6 +377,11 @@ export class KnowledgeBasesService {
       isDefault: row.isDefault,
       activeChunkStrategyName: row.activeChunkStrategyName,
       activeChunkStrategyVersion: row.activeChunkStrategyVersion,
+      activeChunkSize: row.activeChunkSize,
+      activeChunkOverlap: row.activeChunkOverlap,
+      activeChunkSplitterType: row.activeChunkSplitterType,
+      activeChunkPreserveSentenceBoundary:
+        row.activeChunkPreserveSentenceBoundary,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

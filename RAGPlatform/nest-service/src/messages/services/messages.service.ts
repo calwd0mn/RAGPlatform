@@ -17,8 +17,11 @@ export class MessagesService {
     private readonly messageModel: Model<MessageDocument>,
     private readonly conversationsService: ConversationsService,
   ) {}
-
-  async create(userId: string, dto: CreateMessageDto): Promise<MessageResponse> {
+  async create(
+    userId: string,
+    dto: CreateMessageDto,
+  ): Promise<MessageResponse> {
+    // 保证只能操作自己的会话
     await this.conversationsService.ensureOwnedConversation(
       userId,
       dto.conversationId,
@@ -54,7 +57,10 @@ export class MessagesService {
     userId: string,
     conversationId: string,
   ): Promise<MessageResponse[]> {
-    await this.conversationsService.ensureOwnedConversation(userId, conversationId);
+    await this.conversationsService.ensureOwnedConversation(
+      userId,
+      conversationId,
+    );
 
     const normalizedUserId = this.toObjectId(userId);
     const normalizedConversationId = this.toObjectId(conversationId);

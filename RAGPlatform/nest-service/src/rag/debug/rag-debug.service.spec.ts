@@ -4,6 +4,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { ConversationsService } from '../../conversations/services/conversations.service';
+import { ChunkStrategyService } from '../../ingestion/chunk-strategy/chunk-strategy.service';
 import { IngestionEmbeddingsFactory } from '../../ingestion/embeddings/embeddings.factory';
 import { MessageRoleEnum } from '../../messages/interfaces/message-role.type';
 import { Message } from '../../messages/schemas/message.schema';
@@ -35,7 +36,9 @@ interface TestMessageItem {
   content: string;
 }
 
-function createFindQueryChain(messages: TestMessageItem[]): { sort: jest.Mock } {
+function createFindQueryChain(messages: TestMessageItem[]): {
+  sort: jest.Mock;
+} {
   const exec = jest.fn(async () => messages);
   const limit = jest.fn(() => ({ exec }));
   const sort = jest.fn(() => ({ limit }));
@@ -43,6 +46,7 @@ function createFindQueryChain(messages: TestMessageItem[]): { sort: jest.Mock } 
 }
 
 describe('RagDebugService', () => {
+  const knowledgeBaseId = '507f191e810c19729de860ec';
   let originalNodeEnv: string | undefined;
   let service: RagDebugService;
   let messageModelMock: {
@@ -71,6 +75,9 @@ describe('RagDebugService', () => {
   };
   let ragRunRecorderMock: {
     record: jest.Mock;
+  };
+  let chunkStrategyServiceMock: {
+    runTest: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -116,6 +123,9 @@ describe('RagDebugService', () => {
     ragRunRecorderMock = {
       record: jest.fn(async () => undefined),
     };
+    chunkStrategyServiceMock = {
+      runTest: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -160,6 +170,10 @@ describe('RagDebugService', () => {
           provide: RagRunRecorderService,
           useValue: ragRunRecorderMock,
         },
+        {
+          provide: ChunkStrategyService,
+          useValue: chunkStrategyServiceMock,
+        },
       ],
     }).compile();
 
@@ -175,21 +189,24 @@ describe('RagDebugService', () => {
     process.env.NODE_ENV = originalNodeEnv;
   });
 
-  it('appends current query to prompt render history when conversationId is absent', async () => {
+  it('passes current query as explicit prompt question without conversation history', async () => {
     await service.renderPrompt('507f191e810c19729de860ea', {
+      knowledgeBaseId,
       query: 'new question',
       topK: 5,
     });
 
-    expect(messageHistoryMapperMock.toLangchainMessages).toHaveBeenCalledWith([
-      {
-        role: MessageRoleEnum.User,
-        content: 'new question',
-      },
-    ]);
+    expect(messageHistoryMapperMock.toLangchainMessages).toHaveBeenCalledWith(
+      [],
+    );
+    expect(promptRendererMock.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: 'new question',
+      }),
+    );
   });
 
-  it('does not duplicate query if latest history user message already matches', async () => {
+  it('keeps stored history separate from current prompt question', async () => {
     messageModelMock.find.mockReturnValue(
       createFindQueryChain([
         {
@@ -200,6 +217,7 @@ describe('RagDebugService', () => {
     );
 
     await service.renderPrompt('507f191e810c19729de860ea', {
+      knowledgeBaseId,
       query: 'same query',
       conversationId: new Types.ObjectId().toString(),
       topK: 5,
@@ -211,5 +229,10 @@ describe('RagDebugService', () => {
         content: 'same query',
       },
     ]);
+    expect(promptRendererMock.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: 'same query',
+      }),
+    );
   });
 });

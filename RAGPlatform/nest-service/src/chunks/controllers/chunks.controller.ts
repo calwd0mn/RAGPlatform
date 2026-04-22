@@ -65,7 +65,8 @@ export class ChunksController {
     const nodeEnv = (process.env.NODE_ENV ?? '').trim().toLowerCase();
     const flag = (process.env.RAG_DEBUG_ENABLED ?? '').trim().toLowerCase();
     const enabledByFlag = flag === 'true' || flag === '1' || flag === 'yes';
-    const enabled = nodeEnv === 'development' || nodeEnv === 'test' || enabledByFlag;
+    const enabled =
+      nodeEnv === 'development' || nodeEnv === 'test' || enabledByFlag;
 
     if (!enabled) {
       throw new NotFoundException('Not Found');

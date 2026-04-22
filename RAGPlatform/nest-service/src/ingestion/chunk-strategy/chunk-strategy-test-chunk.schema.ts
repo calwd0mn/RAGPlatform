@@ -2,7 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { ChunkMetadata } from '../interfaces/chunk-metadata.interface';
 
-export type ChunkStrategyTestChunkDocument = HydratedDocument<ChunkStrategyTestChunk>;
+export type ChunkStrategyTestChunkDocument =
+  HydratedDocument<ChunkStrategyTestChunk>;
 
 @Schema({ timestamps: true, collection: 'chunk_strategy_test_chunks' })
 export class ChunkStrategyTestChunk {
@@ -34,8 +35,9 @@ export class ChunkStrategyTestChunk {
   updatedAt!: Date;
 }
 
-export const ChunkStrategyTestChunkSchema =
-  SchemaFactory.createForClass(ChunkStrategyTestChunk);
+export const ChunkStrategyTestChunkSchema = SchemaFactory.createForClass(
+  ChunkStrategyTestChunk,
+);
 
 ChunkStrategyTestChunkSchema.index(
   {

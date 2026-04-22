@@ -116,6 +116,7 @@ describe('RagService', () => {
   };
   let conversationsServiceMock: {
     ensureOwnedConversation: jest.Mock;
+    findOneByUser: jest.Mock;
     touchLastMessageAt: jest.Mock;
   };
   let embeddingsFactoryMock: {
@@ -185,6 +186,10 @@ describe('RagService', () => {
 
     conversationsServiceMock = {
       ensureOwnedConversation: jest.fn(),
+      findOneByUser: jest.fn(async () => ({
+        id: '507f1f77bcf86cd799439011',
+        knowledgeBaseId: '507f191e810c19729de860ec',
+      })),
       touchLastMessageAt: jest.fn(),
     };
 
@@ -352,7 +357,7 @@ describe('RagService', () => {
   });
 
   it('returns not found on non-owned conversation', async () => {
-    conversationsServiceMock.ensureOwnedConversation.mockRejectedValue(
+    conversationsServiceMock.findOneByUser.mockRejectedValue(
       new NotFoundException('Conversation not found'),
     );
 

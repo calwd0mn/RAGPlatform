@@ -9,7 +9,6 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { Document as LangChainDocument } from '@langchain/core/documents';
 import { Model, Types } from 'mongoose';
-import { MessageRoleEnum } from '../../messages/interfaces/message-role.type';
 import {
   Document,
   DocumentDocument,
@@ -40,7 +39,10 @@ import { MessageHistoryMapper } from '../mappers/message-history.mapper';
 import { PromptRenderer } from '../prompt/prompt-renderer';
 import { PromptRegistry } from '../prompt/prompt-registry';
 import { DebugExperimentRetrievalProvider } from '../retrievers/providers/debug-experiment-retrieval.provider';
-import { CreateDebugExperimentDto, UpdateDebugExperimentDto } from './dto/create-debug-experiment.dto';
+import {
+  CreateDebugExperimentDto,
+  UpdateDebugExperimentDto,
+} from './dto/create-debug-experiment.dto';
 import { GetDebugExperimentsQueryDto } from './dto/get-debug-experiments-query.dto';
 import { PublishDebugExperimentDto } from './dto/publish-debug-experiment.dto';
 import { RagRunRecorderService } from './rag-run-recorder.service';
@@ -179,7 +181,11 @@ export class DebugExperimentsService {
   async findExperiments(
     userId: string,
     query: GetDebugExperimentsQueryDto,
-  ): Promise<{ items: DebugExperimentDocument[]; limit: number; offset: number }> {
+  ): Promise<{
+    items: DebugExperimentDocument[];
+    limit: number;
+    offset: number;
+  }> {
     const limit = query.limit ?? DEFAULT_LIMIT;
     const offset = query.offset ?? 0;
     const conditions: {
@@ -265,12 +271,8 @@ export class DebugExperimentsService {
           const promptOutput = await this.promptRenderer.render({
             definition: promptDefinition,
             context,
-            history: this.messageHistoryMapper.toLangchainMessages([
-              {
-                role: MessageRoleEnum.User,
-                content: query,
-              },
-            ]),
+            history: this.messageHistoryMapper.toLangchainMessages([]),
+            question: query,
           });
 
           const citations = retrievedChunks.map((chunk) =>
@@ -356,9 +358,7 @@ export class DebugExperimentsService {
     }
 
     const strategyName =
-      dto.strategyName?.trim() ||
-      experiment.chunkStrategyDrafts[0]?.name ||
-      '';
+      dto.strategyName?.trim() || experiment.chunkStrategyDrafts[0]?.name || '';
     if (strategyName.length === 0) {
       throw new BadRequestException('strategyName is required');
     }
@@ -381,7 +381,9 @@ export class DebugExperimentsService {
       .exec();
 
     if (chunks.length === 0) {
-      throw new BadRequestException('Experiment has no generated chunks to publish');
+      throw new BadRequestException(
+        'Experiment has no generated chunks to publish',
+      );
     }
 
     const documentIds = Array.from(
@@ -516,7 +518,9 @@ export class DebugExperimentsService {
     }
 
     if (payload.length > 0) {
-      await this.debugExperimentChunkModel.insertMany(payload, { ordered: true });
+      await this.debugExperimentChunkModel.insertMany(payload, {
+        ordered: true,
+      });
     }
 
     const avgLength = payload.length === 0 ? 0 : totalLength / payload.length;
@@ -540,7 +544,9 @@ export class DebugExperimentsService {
       .exec();
 
     if (rows.length !== new Set(documentIds).size) {
-      throw new NotFoundException('Some documents do not exist or are not owned by user');
+      throw new NotFoundException(
+        'Some documents do not exist or are not owned by user',
+      );
     }
 
     return rows;
@@ -604,7 +610,10 @@ export class DebugExperimentsService {
       }
     });
 
-    return Array.from(unique, (value): Types.ObjectId => this.toObjectId(value));
+    return Array.from(
+      unique,
+      (value): Types.ObjectId => this.toObjectId(value),
+    );
   }
 
   private normalizeQueries(queries: string[]): string[] {
@@ -665,7 +674,9 @@ export class DebugExperimentsService {
     promptDraft: PromptDraft;
   }): Promise<string> {
     const context = this.ragContextBuilder.build(input.retrievedChunks);
-    const promptDefinition = this.promptRegistry.resolveDraft(input.promptDraft);
+    const promptDefinition = this.promptRegistry.resolveDraft(
+      input.promptDraft,
+    );
     const promptTemplate = this.promptRenderer.createTemplate(promptDefinition);
     const fallbackAnswer = this.prepareFallbackAnswer(input.retrievedChunks);
     const model = await this.ragChatModelFactory.create(fallbackAnswer);
@@ -678,12 +689,8 @@ export class DebugExperimentsService {
     try {
       const answer = await chain.invoke({
         context,
-        history: this.messageHistoryMapper.toLangchainMessages([
-          {
-            role: MessageRoleEnum.User,
-            content: input.query,
-          },
-        ]),
+        history: this.messageHistoryMapper.toLangchainMessages([]),
+        question: input.query,
       });
       return answer.trim();
     } catch {

@@ -1,9 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import {
-  ChunkStrategyDraft,
-  PromptDraft,
-} from './debug-experiment.schema';
+import { ChunkStrategyDraft, PromptDraft } from './debug-experiment.schema';
 
 export const RAG_RUN_TYPES = ['ask', 'debug-retrieve', 'debug-render'] as const;
 export type RagRunType = (typeof RAG_RUN_TYPES)[number];

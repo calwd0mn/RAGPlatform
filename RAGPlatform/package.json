@@ -29,6 +29,9 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.2",
+    "commitizen": "^4.3.1",
+    "cz-customizable": "^7.5.4",
+    "cz-vinyl": "^2.5.4",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -41,5 +44,13 @@
     "vite-plugin-antd-dayjs": "^1.0.0",
     "vite-plugin-compression": "^0.5.1",
     "vite-plugin-moment-to-dayjs": "^1.0.7"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-customizable"
+    },
+    "cz-customizable": {
+      "config": ".cz-config.cjs"
+    }
   }
 }

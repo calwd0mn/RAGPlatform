@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "cz": "git-cz",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -20,6 +20,11 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "deps:check": "npm ls --omit=optional --depth=0",
     "chunk-strategy:test": "ts-node scripts/run-chunk-strategy-test.ts"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-vinyl"
+    }
   },
   "jest": {
     "moduleFileExtensions": [
@@ -51,6 +56,7 @@
   "dependencies": {
     "@langchain/community": "^1.1.27",
     "@langchain/core": "^1.1.40",
+    "@langchain/mongodb": "^1.1.0",
     "@langchain/openai": "^1.4.4",
     "@langchain/textsplitters": "^1.0.1",
     "@nestjs/common": "^11.0.1",

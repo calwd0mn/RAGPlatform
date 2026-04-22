@@ -6,6 +6,7 @@ import { Chunk, ChunkDocument } from '../../../ingestion/schemas/chunk.schema';
 import { RetrievedChunk } from '../../interfaces/retrieved-chunk.interface';
 import { getRagRetrievalConfig } from '../config/rag-retrieval.config';
 import { RagRetrievalProvider } from '../interfaces/rag-retrieval-provider.interface';
+import { cosineSimilarity } from '../utils/cosine-similarity.util';
 
 interface ChunkCandidateDocument {
   _id: Types.ObjectId;
@@ -18,6 +19,14 @@ interface ChunkCandidateDocument {
 interface ChunkContentDocument {
   _id: Types.ObjectId;
   content: string;
+}
+
+interface ScoredChunkCandidate {
+  chunkId: string;
+  documentId: string;
+  chunkIndex: number;
+  score: number;
+  metadata: ChunkMetadata;
 }
 
 @Injectable()
@@ -43,10 +52,19 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
     );
 
     const candidates = await this.chunkModel
-      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
+      .find({
+        userId: normalizedUserId,
+        knowledgeBaseId: normalizedKnowledgeBaseId,
+      })
       .sort({ createdAt: -1 })
       .limit(candidateLimit)
-      .select({ _id: 1, documentId: 1, chunkIndex: 1, embedding: 1, metadata: 1 })
+      .select({
+        _id: 1,
+        documentId: 1,
+        chunkIndex: 1,
+        embedding: 1,
+        metadata: 1,
+      })
       .lean<ChunkCandidateDocument[]>()
       .exec();
 
@@ -54,50 +72,24 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
       return [];
     }
 
-    const topCandidates = candidates
+    const results = candidates
       .map(
-        (
-          candidate,
-        ): {
-          chunkId: string;
-          documentId: string;
-          chunkIndex: number;
-          score: number;
-          metadata: ChunkMetadata;
-        } | null => {
-          const score = this.cosineSimilarity(queryEmbedding, candidate.embedding);
-          if (!Number.isFinite(score)) {
-            return null;
-          }
-
-          return {
-            chunkId: candidate._id.toString(),
-            documentId: candidate.documentId.toString(),
-            chunkIndex: candidate.chunkIndex,
-            score,
-            metadata: candidate.metadata,
-          };
-        },
-      )
-      .filter(
-        (
-          candidate,
-        ): candidate is {
-          chunkId: string;
-          documentId: string;
-          chunkIndex: number;
-          score: number;
-          metadata: ChunkMetadata;
-        } => candidate !== null,
+        (candidate): ScoredChunkCandidate => ({
+          chunkId: candidate._id.toString(),
+          documentId: candidate.documentId.toString(),
+          chunkIndex: candidate.chunkIndex,
+          score: cosineSimilarity(queryEmbedding, candidate.embedding),
+          metadata: candidate.metadata,
+        }),
       )
       .sort((left, right): number => right.score - left.score)
       .slice(0, topK);
 
-    if (topCandidates.length === 0) {
+    if (results.length === 0) {
       return [];
     }
 
-    const targetIds = topCandidates.map(
+    const targetIds = results.map(
       (candidate): Types.ObjectId => new Types.ObjectId(candidate.chunkId),
     );
     const contentRows = await this.chunkModel
@@ -111,10 +103,13 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
       .exec();
 
     const contentMap = new Map<string, string>(
-      contentRows.map((row): [string, string] => [row._id.toString(), row.content]),
+      contentRows.map((row): [string, string] => [
+        row._id.toString(),
+        row.content,
+      ]),
     );
 
-    return topCandidates
+    return results
       .map((candidate): RetrievedChunk | null => {
         const content = contentMap.get(candidate.chunkId);
         if (!content) {
@@ -131,30 +126,6 @@ export class LocalCosineRetrievalProvider implements RagRetrievalProvider {
         };
       })
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
-  }
-
-  private cosineSimilarity(left: number[], right: number[]): number {
-    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
-      return Number.NaN;
-    }
-
-    let dotProduct = 0;
-    let leftNorm = 0;
-    let rightNorm = 0;
-
-    for (let index = 0; index < left.length; index += 1) {
-      const leftValue = left[index];
-      const rightValue = right[index];
-      dotProduct += leftValue * rightValue;
-      leftNorm += leftValue * leftValue;
-      rightNorm += rightValue * rightValue;
-    }
-
-    if (leftNorm === 0 || rightNorm === 0) {
-      return Number.NaN;
-    }
-
-    return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
   }
 
   private toObjectId(value: string): Types.ObjectId {

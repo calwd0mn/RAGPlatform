@@ -15,6 +15,7 @@ import { LangchainDocumentMapper } from './mappers/langchain-document.mapper';
 import { Chunk, ChunkSchema } from './schemas/chunk.schema';
 import { IngestionService } from './services/ingestion.service';
 import { TextSplitterFactory } from './splitters/text-splitter.factory';
+import { ChunkVectorStoreService } from './vector-stores/chunk-vector-store.service';
 import {
   DebugExperimentChunk,
   DebugExperimentChunkSchema,
@@ -43,6 +44,7 @@ import {
     IngestionEmbeddingsFactory,
     LangchainDocumentMapper,
     ChunkMetadataBuilder,
+    ChunkVectorStoreService,
     ChunkStrategyRunner,
     ChunkStrategyReporter,
   ],
@@ -53,6 +55,7 @@ import {
     TextSplitterFactory,
     LangchainDocumentMapper,
     ChunkMetadataBuilder,
+    ChunkVectorStoreService,
     ChunkStrategyRunner,
     ChunkStrategyReporter,
   ],

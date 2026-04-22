@@ -2,6 +2,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RetrievedChunk } from '../interfaces/retrieved-chunk.interface';
 import { AtlasVectorRetrievalProvider } from './providers/atlas-vector-retrieval.provider';
+import { DebugExperimentRetrievalProvider } from './providers/debug-experiment-retrieval.provider';
 import { LocalCosineRetrievalProvider } from './providers/local-cosine-retrieval.provider';
 import { RagRetrievalService } from './rag-retrieval.service';
 
@@ -26,8 +27,13 @@ describe('RagRetrievalService', () => {
   let localProviderMock: {
     retrieveTopKByUser: jest.Mock;
   };
+  let debugExperimentProviderMock: {
+    retrieveTopKByExperiment: jest.Mock;
+  };
 
   const originalEnv = { ...process.env };
+  const userId = '507f191e810c19729de860ea';
+  const knowledgeBaseId = '507f191e810c19729de860ec';
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
@@ -36,6 +42,9 @@ describe('RagRetrievalService', () => {
     };
     localProviderMock = {
       retrieveTopKByUser: jest.fn(),
+    };
+    debugExperimentProviderMock = {
+      retrieveTopKByExperiment: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -48,6 +57,10 @@ describe('RagRetrievalService', () => {
         {
           provide: LocalCosineRetrievalProvider,
           useValue: localProviderMock,
+        },
+        {
+          provide: DebugExperimentRetrievalProvider,
+          useValue: debugExperimentProviderMock,
         },
       ],
     }).compile();
@@ -66,12 +79,14 @@ describe('RagRetrievalService', () => {
     atlasProviderMock.retrieveTopKByUser.mockResolvedValue(SAMPLE_CHUNKS);
 
     const result = await service.retrieveTopKByUser(
-      '507f191e810c19729de860ea',
+      userId,
+      knowledgeBaseId,
       [0.2, 0.4],
       3,
     );
     const output = await service.retrieveTopKByUserWithProvider(
-      '507f191e810c19729de860ea',
+      userId,
+      knowledgeBaseId,
       [0.2, 0.4],
       3,
     );
@@ -87,7 +102,8 @@ describe('RagRetrievalService', () => {
     localProviderMock.retrieveTopKByUser.mockResolvedValue(SAMPLE_CHUNKS);
 
     const result = await service.retrieveTopKByUser(
-      '507f191e810c19729de860ea',
+      userId,
+      knowledgeBaseId,
       [0.2, 0.4],
       3,
     );
@@ -101,7 +117,7 @@ describe('RagRetrievalService', () => {
     process.env.RAG_RETRIEVAL_PROVIDER = 'invalid-provider';
 
     await expect(
-      service.retrieveTopKByUser('507f191e810c19729de860ea', [0.2, 0.4], 3),
+      service.retrieveTopKByUser(userId, knowledgeBaseId, [0.2, 0.4], 3),
     ).rejects.toThrow(InternalServerErrorException);
   });
 
@@ -114,7 +130,7 @@ describe('RagRetrievalService', () => {
     );
 
     await expect(
-      service.retrieveTopKByUser('507f191e810c19729de860ea', [0.2, 0.4], 3),
+      service.retrieveTopKByUser(userId, knowledgeBaseId, [0.2, 0.4], 3),
     ).rejects.toThrow(InternalServerErrorException);
 
     expect(localProviderMock.retrieveTopKByUser).not.toHaveBeenCalled();
@@ -132,7 +148,8 @@ describe('RagRetrievalService', () => {
     localProviderMock.retrieveTopKByUser.mockResolvedValue(SAMPLE_CHUNKS);
 
     const output = await service.retrieveTopKByUserWithProvider(
-      '507f191e810c19729de860ea',
+      userId,
+      knowledgeBaseId,
       [0.2, 0.4],
       3,
     );

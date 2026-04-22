@@ -48,7 +48,9 @@ export class DocumentsService {
       throw new BadRequestException('File is required');
     }
 
-    const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+    const normalizedOriginalName = normalizeUploadedOriginalName(
+      file.originalname,
+    );
 
     if (!isAllowedDocumentFileType(file.mimetype, normalizedOriginalName)) {
       throw new BadRequestException('Invalid file type');
@@ -59,7 +61,10 @@ export class DocumentsService {
     }
 
     const normalizedUserId = this.toObjectId(userId);
-    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
+    const knowledgeBase = await this.knowledgeBasesService.findOneByUser(
+      userId,
+      knowledgeBaseId,
+    );
     const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
     const storagePath = buildDocumentStoragePath(file.path);
 
@@ -72,6 +77,13 @@ export class DocumentsService {
       size: file.size,
       storagePath,
       status: DocumentStatusEnum.Uploaded,
+      activeChunkStrategyName: knowledgeBase.activeChunkStrategyName,
+      activeChunkStrategyVersion: knowledgeBase.activeChunkStrategyVersion,
+      activeChunkSize: knowledgeBase.activeChunkSize,
+      activeChunkOverlap: knowledgeBase.activeChunkOverlap,
+      activeChunkSplitterType: knowledgeBase.activeChunkSplitterType,
+      activeChunkPreserveSentenceBoundary:
+        knowledgeBase.activeChunkPreserveSentenceBoundary,
     });
 
     try {
@@ -83,19 +95,33 @@ export class DocumentsService {
     }
   }
 
-  async findAllByUser(userId: string, knowledgeBaseId: string): Promise<DocumentResponse[]> {
+  async findAllByUser(
+    userId: string,
+    knowledgeBaseId: string,
+  ): Promise<DocumentResponse[]> {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedKnowledgeBaseId = this.toObjectId(knowledgeBaseId);
-    await this.knowledgeBasesService.assertOwnedKnowledgeBase(userId, knowledgeBaseId);
+    await this.knowledgeBasesService.assertOwnedKnowledgeBase(
+      userId,
+      knowledgeBaseId,
+    );
     const documents = await this.documentModel
-      .find({ userId: normalizedUserId, knowledgeBaseId: normalizedKnowledgeBaseId })
+      .find({
+        userId: normalizedUserId,
+        knowledgeBaseId: normalizedKnowledgeBaseId,
+      })
       .sort({ createdAt: -1 })
       .exec();
 
-    return documents.map((document): DocumentResponse => this.toResponse(document));
+    return documents.map(
+      (document): DocumentResponse => this.toResponse(document),
+    );
   }
 
-  async findOneByUser(userId: string, documentId: string): Promise<DocumentResponse> {
+  async findOneByUser(
+    userId: string,
+    documentId: string,
+  ): Promise<DocumentResponse> {
     const document = await this.findOwnedDocument(userId, documentId);
     return this.toResponse(document);
   }
@@ -127,14 +153,19 @@ export class DocumentsService {
         .exec(),
     ]);
 
-    await removeStoredDocumentFile(deletedDocument.storagePath).catch((error: Error) => {
-      this.logger.warn(
-        `Failed to remove stored file for document ${deletedDocument.id}: ${error.message}`,
-      );
-    });
+    await removeStoredDocumentFile(deletedDocument.storagePath).catch(
+      (error: Error) => {
+        this.logger.warn(
+          `Failed to remove stored file for document ${deletedDocument.id}: ${error.message}`,
+        );
+      },
+    );
   }
 
-  private async findOwnedDocument(userId: string, documentId: string): Promise<DocumentDocument> {
+  private async findOwnedDocument(
+    userId: string,
+    documentId: string,
+  ): Promise<DocumentDocument> {
     const normalizedUserId = this.toObjectId(userId);
     const normalizedDocumentId = this.toObjectId(documentId);
 

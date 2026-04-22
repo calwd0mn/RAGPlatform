@@ -5,8 +5,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { BaseMessage } from '@langchain/core/messages';
 import { StringOutputParser } from '@langchain/core/output_parsers';
-import { RunnableSequence } from '@langchain/core/runnables';
+import { RunnableLambda, RunnableSequence } from '@langchain/core/runnables';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ConversationsService } from '../conversations/services/conversations.service';
 import { IngestionEmbeddingsFactory } from '../ingestion/embeddings/embeddings.factory';
@@ -44,6 +45,18 @@ interface AskExecutionOptions {
   signal?: AbortSignal;
 }
 
+interface AnswerChainInput {
+  question: string;
+  retrievedChunks: RetrievedChunk[];
+  historyItems: HistoryMessageItem[];
+}
+
+interface AnswerChainPromptInput {
+  context: string;
+  history: BaseMessage[];
+  question: string;
+}
+
 @Injectable()
 export class RagService {
   private transactionsSupported: boolean | null = null;
@@ -66,163 +79,18 @@ export class RagService {
   ) {}
 
   async ask(userId: string, dto: AskRagDto): Promise<RagAnswer> {
-    const query = dto.query.trim();
-    if (query.length === 0) {
-      throw new BadRequestException('query must not be empty');
-    }
-
-    const topK = dto.topK ?? getRagRetrievalConfig().topKDefault;
-    const promptDefinition = this.promptRegistry.getCurrent();
-    const startedAt = Date.now();
-    let retrievedChunks: RetrievedChunk[] = [];
-    let retrievalProvider = '';
-    let knowledgeBaseId = '';
-
-    try {
-      const conversation = await this.conversationsService.findOneByUser(
-        userId,
-        dto.conversationId,
-      );
-      knowledgeBaseId = conversation.knowledgeBaseId;
-
-      const userMessage = await this.createMessageAndTouch({
-        userId,
-        conversationId: dto.conversationId,
-        role: MessageRoleEnum.User,
-        content: query,
-        citations: [],
-        trace: undefined,
-      });
-
-      const historyItems = await this.findRecentHistory(
-        userId,
-        dto.conversationId,
-        HISTORY_LIMIT,
-      );
-
-      let queryEmbedding: number[];
-      try {
-        queryEmbedding = await this.embeddingsFactory.createEmbeddings().embedQuery(query);
-      } catch {
-        throw new InternalServerErrorException('Failed to generate query embedding');
-      }
-
-      const retrievalOutput =
-        await this.ragRetrievalService.retrieveTopKByUserWithProvider(
-          userId,
-          knowledgeBaseId,
-          queryEmbedding,
-          topK,
-        );
-      retrievedChunks = retrievalOutput.chunks;
-      retrievalProvider = retrievalOutput.provider;
-      const context = this.ragContextBuilder.build(retrievedChunks);
-      const citations = retrievedChunks.map((chunk): RagCitation =>
-        this.chunkToCitationMapper.map(chunk),
-      );
-
-      const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
-
-      const answer = await this.generateAnswer({
-        preparedAnswer,
-        context,
-        historyItems,
-        promptDefinition,
-        options: {},
-      });
-
-      const trace: MessageTrace = {
-        knowledgeBaseId,
-        query,
-        topK,
-        retrievedCount: retrievedChunks.length,
-        model: this.ragChatModelFactory.getModelLabel(),
-        retrievalProvider,
-        promptVersion: promptDefinition.versionedId,
-        latencyMs: Date.now() - startedAt,
-      };
-
-      const assistantMessage = await this.createMessageAndTouch({
-        userId,
-        conversationId: dto.conversationId,
-        role: MessageRoleEnum.Assistant,
-        content: answer,
-        citations,
-        trace,
-      });
-
-      await this.ragRunRecorder.record({
-        userId,
-        knowledgeBaseId,
-        conversationId: dto.conversationId,
-        runType: 'ask',
-        query,
-        promptVersion: promptDefinition.versionedId,
-        topK,
-        retrievalProvider,
-        retrievalNamespace: 'production',
-        retrievalSource: 'production',
-        promptSnapshot: {
-          basePromptId: promptDefinition.id,
-          systemPrompt: promptDefinition.systemPrompt,
-          contextTemplate: promptDefinition.contextTemplate,
-          versionLabel: promptDefinition.version,
-        },
-        retrievalHits: mapRetrievedChunksToRunHits(retrievedChunks),
-        latencyMs: Date.now() - startedAt,
-        status: 'success',
-      });
-
-      return {
-        answer,
-        citations,
-        trace: {
-          knowledgeBaseId,
-          query,
-          topK,
-          retrievedCount: retrievedChunks.length,
-          model: this.ragChatModelFactory.getModelLabel(),
-          retrievalProvider,
-          promptVersion: promptDefinition.versionedId,
-          latencyMs: trace.latencyMs ?? 0,
-        },
-        conversationId: dto.conversationId,
-        userMessageId: userMessage.id,
-        assistantMessageId: assistantMessage.id,
-      };
-    } catch (error) {
-      await this.ragRunRecorder.record({
-        userId,
-        knowledgeBaseId,
-        conversationId: dto.conversationId,
-        runType: 'ask',
-        query,
-        promptVersion: promptDefinition.versionedId,
-        topK,
-        retrievalProvider: retrievalProvider.length > 0 ? retrievalProvider : undefined,
-        retrievalNamespace: 'production',
-        retrievalSource: 'production',
-        promptSnapshot: {
-          basePromptId: promptDefinition.id,
-          systemPrompt: promptDefinition.systemPrompt,
-          contextTemplate: promptDefinition.contextTemplate,
-          versionLabel: promptDefinition.version,
-        },
-        retrievalHits: mapRetrievedChunksToRunHits(retrievedChunks),
-        latencyMs: Date.now() - startedAt,
-        status: 'error',
-        errorCode: this.resolveErrorCode(error),
-      });
-
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      throw new InternalServerErrorException('Failed to process ask request');
-    }
+    return this.executeAsk(userId, dto, {});
   }
 
   async askStream(
+    userId: string,
+    dto: AskRagDto,
+    options: AskExecutionOptions,
+  ): Promise<RagAnswer> {
+    return this.executeAsk(userId, dto, options);
+  }
+
+  private async executeAsk(
     userId: string,
     dto: AskRagDto,
     options: AskExecutionOptions,
@@ -246,6 +114,12 @@ export class RagService {
       );
       knowledgeBaseId = conversation.knowledgeBaseId;
 
+      const historyItems = await this.findRecentHistory(
+        userId,
+        dto.conversationId,
+        HISTORY_LIMIT,
+      );
+
       const userMessage = await this.createMessageAndTouch({
         userId,
         conversationId: dto.conversationId,
@@ -255,17 +129,15 @@ export class RagService {
         trace: undefined,
       });
 
-      const historyItems = await this.findRecentHistory(
-        userId,
-        dto.conversationId,
-        HISTORY_LIMIT,
-      );
-
       let queryEmbedding: number[];
       try {
-        queryEmbedding = await this.embeddingsFactory.createEmbeddings().embedQuery(query);
+        queryEmbedding = await this.embeddingsFactory
+          .createEmbeddings()
+          .embedQuery(query);
       } catch {
-        throw new InternalServerErrorException('Failed to generate query embedding');
+        throw new InternalServerErrorException(
+          'Failed to generate query embedding',
+        );
       }
 
       const retrievalOutput =
@@ -277,15 +149,16 @@ export class RagService {
         );
       retrievedChunks = retrievalOutput.chunks;
       retrievalProvider = retrievalOutput.provider;
-      const context = this.ragContextBuilder.build(retrievedChunks);
-      const citations = retrievedChunks.map((chunk): RagCitation =>
-        this.chunkToCitationMapper.map(chunk),
+      const citations = retrievedChunks.map(
+        (chunk): RagCitation => this.chunkToCitationMapper.map(chunk),
       );
 
       const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
+
       const answer = await this.generateAnswer({
+        question: query,
         preparedAnswer,
-        context,
+        retrievedChunks,
         historyItems,
         promptDefinition,
         options,
@@ -359,7 +232,8 @@ export class RagService {
         query,
         promptVersion: promptDefinition.versionedId,
         topK,
-        retrievalProvider: retrievalProvider.length > 0 ? retrievalProvider : undefined,
+        retrievalProvider:
+          retrievalProvider.length > 0 ? retrievalProvider : undefined,
         retrievalNamespace: 'production',
         retrievalSource: 'production',
         promptSnapshot: {
@@ -383,20 +257,23 @@ export class RagService {
   }
 
   private async generateAnswer(input: {
+    question: string;
     preparedAnswer: string;
-    context: string;
+    retrievedChunks: RetrievedChunk[];
     historyItems: HistoryMessageItem[];
     promptDefinition: RagPromptDefinition;
     options: AskExecutionOptions;
   }): Promise<string> {
     try {
-      const model = await this.ragChatModelFactory.create(input.preparedAnswer);
-      const prompt = this.promptRenderer.createTemplate(input.promptDefinition);
-      const chain = RunnableSequence.from([prompt, model, new StringOutputParser()]);
       const chainInput = {
-        context: input.context,
-        history: this.messageHistoryMapper.toLangchainMessages(input.historyItems),
+        question: input.question,
+        retrievedChunks: input.retrievedChunks,
+        historyItems: input.historyItems,
       };
+      const chain = await this.buildAnswerChain(
+        input.preparedAnswer,
+        input.promptDefinition,
+      );
       const chainConfig = input.options.signal
         ? {
             signal: input.options.signal,
@@ -431,6 +308,33 @@ export class RagService {
     }
   }
 
+  private async buildAnswerChain(
+    preparedAnswer: string,
+    promptDefinition: RagPromptDefinition,
+  ): Promise<RunnableSequence<AnswerChainInput, string>> {
+    const model = await this.ragChatModelFactory.create(preparedAnswer);
+    const prompt = this.promptRenderer.createTemplate(promptDefinition);
+    const formatPromptInput = RunnableLambda.from<
+      AnswerChainInput,
+      AnswerChainPromptInput
+    >(
+      (chainInput: AnswerChainInput): AnswerChainPromptInput => ({
+        context: this.ragContextBuilder.build(chainInput.retrievedChunks),
+        history: this.messageHistoryMapper.toLangchainMessages(
+          chainInput.historyItems,
+        ),
+        question: chainInput.question,
+      }),
+    );
+
+    return RunnableSequence.from([
+      formatPromptInput,
+      prompt,
+      model,
+      new StringOutputParser(),
+    ]);
+  }
+
   private prepareFallbackAnswer(chunks: RetrievedChunk[]): string {
     if (chunks.length === 0) {
       return '根据当前已检索到的信息无法确定。';
@@ -458,24 +362,25 @@ export class RagService {
       .limit(limit)
       .exec();
 
-    return messages
-      .reverse()
-      .map(
-        (message): HistoryMessageItem => ({
-          role: message.role,
-          content: message.content,
-        }),
-      );
+    return messages.reverse().map(
+      (message): HistoryMessageItem => ({
+        role: message.role,
+        content: message.content,
+      }),
+    );
   }
 
-  private async createMessage(input: {
-    userId: string;
-    conversationId: string;
-    role: MessageRoleEnum;
-    content: string;
-    citations: RagCitation[];
-    trace?: MessageTrace;
-  }, session?: ClientSession): Promise<MessageDocument> {
+  private async createMessage(
+    input: {
+      userId: string;
+      conversationId: string;
+      role: MessageRoleEnum;
+      content: string;
+      citations: RagCitation[];
+      trace?: MessageTrace;
+    },
+    session?: ClientSession,
+  ): Promise<MessageDocument> {
     const createdMessage = new this.messageModel({
       userId: this.toObjectId(input.userId),
       conversationId: this.toObjectId(input.conversationId),
@@ -545,7 +450,9 @@ export class RagService {
     }
 
     try {
-      const helloResult = await this.connection.db.admin().command({ hello: 1 }) as MongoHelloResult;
+      const helloResult = (await this.connection.db
+        .admin()
+        .command({ hello: 1 })) as MongoHelloResult;
       this.transactionsSupported = Boolean(helloResult.setName);
     } catch {
       this.transactionsSupported = false;

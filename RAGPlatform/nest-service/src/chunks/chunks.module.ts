@@ -13,6 +13,7 @@ import { ChunksService } from './services/chunks.service';
 @Module({
   imports: [
     IngestionModule,
+    // 注册schema
     MongooseModule.forFeature([
       { name: Chunk.name, schema: ChunkSchema },
       {

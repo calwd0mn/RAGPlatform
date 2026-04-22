@@ -14,10 +14,6 @@ import { UploadedDocumentFile } from '../interfaces/uploaded-document-file.inter
 import { Document, DocumentDocument } from '../schemas/document.schema';
 import { Chunk, ChunkDocument } from '../../ingestion/schemas/chunk.schema';
 import {
-  DebugExperimentChunk,
-  DebugExperimentChunkDocument,
-} from '../../schemas/debug-experiment-chunk.schema';
-import {
   buildDocumentStoragePath,
   isAllowedDocumentFileType,
   normalizeUploadedOriginalName,
@@ -34,8 +30,6 @@ export class DocumentsService {
     private readonly documentModel: Model<DocumentDocument>,
     @InjectModel(Chunk.name)
     private readonly chunkModel: Model<ChunkDocument>,
-    @InjectModel(DebugExperimentChunk.name)
-    private readonly debugExperimentChunkModel: Model<DebugExperimentChunkDocument>,
     private readonly knowledgeBasesService: KnowledgeBasesService,
   ) {}
 
@@ -138,20 +132,12 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
-    await Promise.all([
-      this.chunkModel
-        .deleteMany({
-          userId: normalizedUserId,
-          documentId: normalizedDocumentId,
-        })
-        .exec(),
-      this.debugExperimentChunkModel
-        .deleteMany({
-          userId: normalizedUserId,
-          documentId: normalizedDocumentId,
-        })
-        .exec(),
-    ]);
+    await this.chunkModel
+      .deleteMany({
+        userId: normalizedUserId,
+        documentId: normalizedDocumentId,
+      })
+      .exec();
 
     await removeStoredDocumentFile(deletedDocument.storagePath).catch(
       (error: Error) => {

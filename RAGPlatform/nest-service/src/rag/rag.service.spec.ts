@@ -21,7 +21,6 @@ import { PromptRenderer } from './prompt/prompt-renderer';
 import { PromptRegistry } from './prompt/prompt-registry';
 import { RagRetrievalService } from './retrievers/rag-retrieval.service';
 import { RagService } from './rag.service';
-import { RagRunRecorderService } from './debug/rag-run-recorder.service';
 
 class StaticEmbeddings extends Embeddings {
   constructor(private readonly value: number[]) {
@@ -65,15 +64,15 @@ interface TestMessageDoc {
     score?: number;
     page?: number;
   }>;
-    trace?: {
-      query?: string;
-      rewrittenQuery?: string;
-      topK?: number;
-      retrievedCount?: number;
-      model?: string;
-      promptVersion?: string;
-      latencyMs?: number;
-    };
+  trace?: {
+    query?: string;
+    rewrittenQuery?: string;
+    topK?: number;
+    retrievedCount?: number;
+    model?: string;
+    promptVersion?: string;
+    latencyMs?: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -140,9 +139,6 @@ describe('RagService', () => {
   };
   let promptRegistryMock: {
     getCurrent: jest.Mock;
-  };
-  let ragRunRecorderMock: {
-    record: jest.Mock;
   };
   let connectionMock: {
     startSession: jest.Mock;
@@ -235,10 +231,6 @@ describe('RagService', () => {
         contextTemplate: '检索上下文如下：\n{context}',
       })),
     };
-    ragRunRecorderMock = {
-      record: jest.fn(async () => undefined),
-    };
-
     sessionMock = {
       withTransaction: jest.fn(async (runInTransaction: () => Promise<void>) =>
         runInTransaction(),
@@ -294,10 +286,6 @@ describe('RagService', () => {
           useValue: new PromptRenderer(),
         },
         {
-          provide: RagRunRecorderService,
-          useValue: ragRunRecorderMock,
-        },
-        {
           provide: getConnectionToken(),
           useValue: connectionMock,
         },
@@ -345,14 +333,18 @@ describe('RagService', () => {
     expect(result.trace.retrievedCount).toBe(1);
     expect(result.trace.topK).toBe(4);
     expect(result.trace.retrievalProvider).toBe('local');
-    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(2);
+    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(
+      2,
+    );
     expect(messageModelMock).toHaveBeenCalledTimes(2);
 
     const assistantPayload = messageModelMock.mock.calls[1][0] as {
       citations: Array<{ chunkId?: string }>;
       trace?: { retrievedCount?: number };
     };
-    expect(assistantPayload.citations[0].chunkId).toBe('507f1f77bcf86cd799439041');
+    expect(assistantPayload.citations[0].chunkId).toBe(
+      '507f1f77bcf86cd799439041',
+    );
     expect(assistantPayload.trace?.retrievedCount).toBe(1);
   });
 
@@ -390,7 +382,9 @@ describe('RagService', () => {
 
   it('handles embedding failure with internal server error', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
-    embeddingsFactoryMock.createEmbeddings.mockReturnValue(new FailingEmbeddings());
+    embeddingsFactoryMock.createEmbeddings.mockReturnValue(
+      new FailingEmbeddings(),
+    );
 
     await expect(
       service.ask('507f191e810c19729de860ea', {
@@ -400,7 +394,9 @@ describe('RagService', () => {
     ).rejects.toThrow(InternalServerErrorException);
 
     expect(messageModelMock).toHaveBeenCalledTimes(1);
-    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(1);
+    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('handles model failure with internal server error', async () => {
@@ -419,13 +415,17 @@ describe('RagService', () => {
     ).rejects.toThrow(InternalServerErrorException);
 
     expect(messageModelMock).toHaveBeenCalledTimes(1);
-    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(1);
+    expect(conversationsServiceMock.touchLastMessageAt).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('keeps retrieval explicit error message from retrieval layer', async () => {
     messageModelMock.find.mockReturnValue(createFindQueryChain([]));
     retrievalServiceMock.retrieveTopKByUserWithProvider.mockRejectedValue(
-      new InternalServerErrorException('Atlas retrieval is unavailable: atlas down'),
+      new InternalServerErrorException(
+        'Atlas retrieval is unavailable: atlas down',
+      ),
     );
 
     await expect(

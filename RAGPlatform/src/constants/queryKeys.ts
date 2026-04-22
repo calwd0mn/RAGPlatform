@@ -26,9 +26,8 @@ export const queryKeys = {
       chunkId: string,
       before: number,
       after: number,
-      experimentId?: string,
     ) =>
-      ["chunks", "context", knowledgeBaseId, chunkId, before, after, experimentId ?? "production"] as const,
+      ["chunks", "context", knowledgeBaseId, chunkId, before, after] as const,
   },
   rag: {
     traces: (conversationId: string) =>

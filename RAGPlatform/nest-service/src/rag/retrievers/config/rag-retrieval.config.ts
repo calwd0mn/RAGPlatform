@@ -6,10 +6,7 @@ const DEFAULT_VECTOR_INDEX_NAME = 'chunk_vector_index';
 const DEFAULT_VECTOR_PATH = 'embedding';
 const DEFAULT_VECTOR_CANDIDATE_LIMIT = 100;
 
-export type RagRetrievalProviderType =
-  | 'atlas'
-  | 'local'
-  | 'debug-experiment-local';
+export type RagRetrievalProviderType = 'atlas' | 'local';
 
 export interface RagRetrievalConfig {
   provider: RagRetrievalProviderType;
@@ -77,8 +74,11 @@ export function getRagRetrievalConfig(): RagRetrievalConfig {
     parsePositiveInteger(process.env.RAG_VECTOR_CANDIDATE_LIMIT) ??
     DEFAULT_VECTOR_CANDIDATE_LIMIT;
   const vectorIndexName =
-    vectorIndexNameEnv.length > 0 ? vectorIndexNameEnv : DEFAULT_VECTOR_INDEX_NAME;
-  const vectorPath = vectorPathEnv.length > 0 ? vectorPathEnv : DEFAULT_VECTOR_PATH;
+    vectorIndexNameEnv.length > 0
+      ? vectorIndexNameEnv
+      : DEFAULT_VECTOR_INDEX_NAME;
+  const vectorPath =
+    vectorPathEnv.length > 0 ? vectorPathEnv : DEFAULT_VECTOR_PATH;
   const nodeEnv = readString('NODE_ENV', '').toLowerCase();
   const allowLocalFallback = parseBoolean(
     process.env.RAG_RETRIEVAL_ALLOW_FALLBACK_TO_LOCAL,

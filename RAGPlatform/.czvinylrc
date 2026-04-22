@@ -1,79 +1,73 @@
 {
   "headerFormat": "{type}{scope}: {emoji} {subject}",
-  "types": [
+  "commitTypes": [
     {
-      "name": "feat",
-      "description": "✨  新增功能 (feat)",
       "value": "feat",
+      "description": "新增功能",
       "emoji": "✨"
     },
     {
-      "name": "fix",
-      "description": "🐛  修复缺陷 (fix)",
       "value": "fix",
+      "description": "修复缺陷",
       "emoji": "🐛"
     },
     {
-      "name": "docs",
-      "description": "📝  文档更新 (docs)",
       "value": "docs",
+      "description": "文档更新",
       "emoji": "📝"
     },
     {
-      "name": "style",
-      "description": "💄  代码格式 (不影响代码运行的变动，空格、格式化等)",
       "value": "style",
+      "description": "代码格式，不影响代码运行的变动",
       "emoji": "💄"
     },
     {
-      "name": "refactor",
-      "description": "♻️  代码重构 (既不是新增功能，也不是修复缺陷的代码变动)",
       "value": "refactor",
+      "description": "代码重构，既不是新增功能，也不是修复缺陷",
       "emoji": "♻️"
     },
     {
-      "name": "perf",
-      "description": "⚡️  性能优化",
       "value": "perf",
+      "description": "性能优化",
       "emoji": "⚡️"
     },
     {
-      "name": "test",
-      "description": "✅  测试相关 (增加测试，或修改现有的测试)",
       "value": "test",
+      "description": "测试相关，增加测试或修改现有测试",
       "emoji": "✅"
     },
     {
-      "name": "build",
-      "description": "📦️  构建相关 (打包配置、依赖包调整等)",
       "value": "build",
+      "description": "构建相关，打包配置或依赖调整",
       "emoji": "📦️"
     },
     {
-      "name": "ci",
-      "description": "🎡  持续集成 (CI 配置文件和脚本的更改)",
       "value": "ci",
+      "description": "持续集成，CI 配置文件和脚本更改",
       "emoji": "🎡"
     },
     {
-      "name": "chore",
-      "description": "🔨  其他修改 (不在上述类型中的杂项修改，比如工程配置)",
       "value": "chore",
+      "description": "其他修改，不在上述类型中的杂项修改",
       "emoji": "🔨"
     },
     {
-      "name": "revert",
-      "description": "⏪️  回滚代码",
       "value": "revert",
+      "description": "回滚代码",
       "emoji": "⏪️"
     }
   ],
-  "messages": {
-    "type": "请选择你要提交的更改类型：",
-    "scope": "请填写更改的影响范围 (例如：组件或文件名称) (可选)：",
-    "subject": "请简明扼要地描述更改 (必填，最多 90 个字符)：",
-    "body": "请提供更详细的更改说明，可以多行 (可选)：\n",
-    "breaking": "列出所有的破坏性变更 (如无，请直接回车跳过) (可选)：\n",
-    "issues": "列出本次更改修复或关联的 issues编号 (如：#123, #124) (可选)：\n"
-  }
+  "typeQuestion": "请选择你要提交的更改类型：\n",
+  "scopeQuestion": "请输入更改范围，例如组件或模块名：",
+  "skipScope": true,
+  "ticketIdQuestion": "请输入关联任务编号，如无可跳过：",
+  "skipTicketId": true,
+  "subjectQuestion": "请简明扼要地描述更改：\n",
+  "subjectMaxLength": 90,
+  "subjectMinLength": 1,
+  "bodyQuestion": "请提供更详细的更改说明，可以多行：\n",
+  "skipBody": true,
+  "skipBreakingChanges": true,
+  "issuesQuestion": "请输入关联 issue，例如 #123：",
+  "skipIssues": true
 }

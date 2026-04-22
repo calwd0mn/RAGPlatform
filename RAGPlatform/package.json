@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "prepare": "husky"
+    "prepare": "husky",
+    "cz": "git-cz"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.1",
@@ -24,6 +25,8 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
@@ -32,11 +35,15 @@
     "commitizen": "^4.3.1",
     "cz-customizable": "^7.5.4",
     "cz-vinyl": "^2.5.4",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
     "rollup-plugin-visualizer": "^7.0.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
@@ -47,10 +54,11 @@
   },
   "config": {
     "commitizen": {
-      "path": "cz-customizable"
-    },
-    "cz-customizable": {
-      "config": ".cz-config.cjs"
+      "path": "cz-vinyl"
     }
+  },
+  "lint_staged": {
+    "*.{ts,js,tsx}": "eslint",
+    "*.{css,scss,css}": "stylelint"
   }
 }

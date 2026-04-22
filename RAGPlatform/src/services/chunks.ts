@@ -5,7 +5,6 @@ interface GetChunkContextParams {
   knowledgeBaseId: string;
   before?: number;
   after?: number;
-  experimentId?: string;
 }
 
 export async function getChunkContext(
@@ -19,7 +18,6 @@ export async function getChunkContext(
         knowledgeBaseId: params.knowledgeBaseId,
         before: params.before,
         after: params.after,
-        experimentId: params.experimentId,
       },
     },
   );

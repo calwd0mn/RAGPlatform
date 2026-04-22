@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { ChunkSplitterType } from '../../ingestion/chunk-strategy/chunk-strategy.types';
+import { ChunkSplitterType } from '../../ingestion/splitters/chunk-splitter.type';
 
 export type KnowledgeBaseDocument = HydratedDocument<KnowledgeBase>;
 

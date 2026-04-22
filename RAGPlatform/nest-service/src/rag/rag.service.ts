@@ -22,8 +22,6 @@ import { RagCitation } from './interfaces/rag-citation.interface';
 import { RetrievedChunk } from './interfaces/retrieved-chunk.interface';
 import { PromptRenderer } from './prompt/prompt-renderer';
 import { PromptRegistry, RagPromptDefinition } from './prompt/prompt-registry';
-import { mapRetrievedChunksToRunHits } from './debug/utils/map-retrieval-hits.util';
-import { RagRunRecorderService } from './debug/rag-run-recorder.service';
 import { ChunkToCitationMapper } from './mappers/chunk-to-citation.mapper';
 import { MessageHistoryMapper } from './mappers/message-history.mapper';
 import { getRagRetrievalConfig } from './retrievers/config/rag-retrieval.config';
@@ -75,7 +73,6 @@ export class RagService {
     private readonly ragChatModelFactory: RagChatModelFactory,
     private readonly promptRegistry: PromptRegistry,
     private readonly promptRenderer: PromptRenderer,
-    private readonly ragRunRecorder: RagRunRecorderService,
   ) {}
 
   async ask(userId: string, dto: AskRagDto): Promise<RagAnswer> {
@@ -184,28 +181,6 @@ export class RagService {
         trace,
       });
 
-      await this.ragRunRecorder.record({
-        userId,
-        knowledgeBaseId,
-        conversationId: dto.conversationId,
-        runType: 'ask',
-        query,
-        promptVersion: promptDefinition.versionedId,
-        topK,
-        retrievalProvider,
-        retrievalNamespace: 'production',
-        retrievalSource: 'production',
-        promptSnapshot: {
-          basePromptId: promptDefinition.id,
-          systemPrompt: promptDefinition.systemPrompt,
-          contextTemplate: promptDefinition.contextTemplate,
-          versionLabel: promptDefinition.version,
-        },
-        retrievalHits: mapRetrievedChunksToRunHits(retrievedChunks),
-        latencyMs: Date.now() - startedAt,
-        status: 'success',
-      });
-
       return {
         answer,
         citations,
@@ -224,30 +199,6 @@ export class RagService {
         assistantMessageId: assistantMessage.id,
       };
     } catch (error) {
-      await this.ragRunRecorder.record({
-        userId,
-        knowledgeBaseId,
-        conversationId: dto.conversationId,
-        runType: 'ask',
-        query,
-        promptVersion: promptDefinition.versionedId,
-        topK,
-        retrievalProvider:
-          retrievalProvider.length > 0 ? retrievalProvider : undefined,
-        retrievalNamespace: 'production',
-        retrievalSource: 'production',
-        promptSnapshot: {
-          basePromptId: promptDefinition.id,
-          systemPrompt: promptDefinition.systemPrompt,
-          contextTemplate: promptDefinition.contextTemplate,
-          versionLabel: promptDefinition.version,
-        },
-        retrievalHits: mapRetrievedChunksToRunHits(retrievedChunks),
-        latencyMs: Date.now() - startedAt,
-        status: 'error',
-        errorCode: this.resolveErrorCode(error),
-      });
-
       if (error instanceof HttpException) {
         throw error;
       }
@@ -467,17 +418,5 @@ export class RagService {
     }
 
     return new Types.ObjectId(value);
-  }
-
-  private resolveErrorCode(error: Error | HttpException): string {
-    if (error instanceof HttpException) {
-      return `HTTP_${error.getStatus()}`;
-    }
-
-    if (error instanceof Error && error.message.trim().length > 0) {
-      return error.message.trim().slice(0, 100);
-    }
-
-    return 'RAG_ASK_ERROR';
   }
 }

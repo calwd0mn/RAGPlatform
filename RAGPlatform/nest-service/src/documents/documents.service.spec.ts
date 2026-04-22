@@ -2,12 +2,17 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { Chunk } from '../ingestion/schemas/chunk.schema';
+import { KnowledgeBasesService } from '../knowledge-bases/knowledge-bases.service';
 import { DOCUMENT_MAX_FILE_SIZE } from './constants/document.constants';
 import { DocumentsService } from './documents.service';
 import { UploadedDocumentFile } from './interfaces/uploaded-document-file.interface';
 import { DocumentStatusEnum } from './interfaces/document-status.type';
 import { Document } from './schemas/document.schema';
 import * as documentFileUtil from './utils/document-file.util';
+
+const USER_ID = '507f191e810c19729de860ea';
+const KNOWLEDGE_BASE_ID = '507f191e810c19729de860ec';
 
 function createDocumentDoc(input?: {
   id?: string;
@@ -19,6 +24,7 @@ function createDocumentDoc(input?: {
 }): {
   id: string;
   userId: Types.ObjectId;
+  knowledgeBaseId: Types.ObjectId;
   filename: string;
   originalName: string;
   mimeType: string;
@@ -33,7 +39,8 @@ function createDocumentDoc(input?: {
   const baseTime = new Date('2026-04-16T00:00:00.000Z');
   return {
     id: input?.id ?? '507f1f77bcf86cd799439111',
-    userId: new Types.ObjectId(input?.userId ?? '507f191e810c19729de860ea'),
+    userId: new Types.ObjectId(input?.userId ?? USER_ID),
+    knowledgeBaseId: new Types.ObjectId(KNOWLEDGE_BASE_ID),
     filename: input?.filename ?? 'file-1.txt',
     originalName: input?.originalName ?? 'source.txt',
     mimeType: 'text/plain',
@@ -80,12 +87,20 @@ describe('DocumentsService', () => {
     findOne: jest.Mock;
     findOneAndDelete: jest.Mock;
   };
+  let chunkModelMock: {
+    deleteMany: jest.Mock;
+  };
+  let knowledgeBasesServiceMock: {
+    findOneByUser: jest.Mock;
+    assertOwnedKnowledgeBase: jest.Mock;
+  };
 
   beforeEach(async () => {
     const constructorMock = jest.fn(function mockModel(
       this: { save: jest.Mock },
       params: {
         userId: Types.ObjectId;
+        knowledgeBaseId: Types.ObjectId;
         filename: string;
         originalName: string;
         mimeType: string;
@@ -110,6 +125,21 @@ describe('DocumentsService', () => {
       findOne: jest.fn(),
       findOneAndDelete: jest.fn(),
     });
+    chunkModelMock = {
+      deleteMany: jest.fn(() => createExecQuery({ deletedCount: 1 })),
+    };
+    knowledgeBasesServiceMock = {
+      findOneByUser: jest.fn(async () => ({
+        id: KNOWLEDGE_BASE_ID,
+        activeChunkStrategyName: undefined,
+        activeChunkStrategyVersion: undefined,
+        activeChunkSize: undefined,
+        activeChunkOverlap: undefined,
+        activeChunkSplitterType: undefined,
+        activeChunkPreserveSentenceBoundary: undefined,
+      })),
+      assertOwnedKnowledgeBase: jest.fn(async () => undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -117,6 +147,14 @@ describe('DocumentsService', () => {
         {
           provide: getModelToken(Document.name),
           useValue: modelMock,
+        },
+        {
+          provide: getModelToken(Chunk.name),
+          useValue: chunkModelMock,
+        },
+        {
+          provide: KnowledgeBasesService,
+          useValue: knowledgeBasesServiceMock,
         },
       ],
     }).compile();
@@ -130,36 +168,54 @@ describe('DocumentsService', () => {
 
   it('creates document metadata with uploaded status', async () => {
     const file = createUploadFile();
-    const result = await service.createFromUpload('507f191e810c19729de860ea', file);
+    const result = await service.createFromUpload(
+      USER_ID,
+      KNOWLEDGE_BASE_ID,
+      file,
+    );
 
     expect(result.status).toBe(DocumentStatusEnum.Uploaded);
     expect(result.originalName).toBe('source.txt');
+    expect(knowledgeBasesServiceMock.findOneByUser).toHaveBeenCalledWith(
+      USER_ID,
+      KNOWLEDGE_BASE_ID,
+    );
   });
 
   it('rejects unsupported file type', async () => {
-    const file = createUploadFile({ originalname: 'source.exe', mimetype: 'application/octet-stream' });
+    const file = createUploadFile({
+      originalname: 'source.exe',
+      mimetype: 'application/octet-stream',
+    });
 
-    await expect(service.createFromUpload('507f191e810c19729de860ea', file)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.createFromUpload(USER_ID, KNOWLEDGE_BASE_ID, file),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects oversized file', async () => {
     const file = createUploadFile({ size: DOCUMENT_MAX_FILE_SIZE + 1 });
 
-    await expect(service.createFromUpload('507f191e810c19729de860ea', file)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.createFromUpload(USER_ID, KNOWLEDGE_BASE_ID, file),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('lists only queried user documents with createdAt desc sort', async () => {
-    const docs = [createDocumentDoc(), createDocumentDoc({ id: '507f1f77bcf86cd799439112' })];
+    const docs = [
+      createDocumentDoc(),
+      createDocumentDoc({ id: '507f1f77bcf86cd799439112' }),
+    ];
     const sortMock = jest.fn(() => createExecQuery(docs));
     modelMock.find.mockReturnValue({ sort: sortMock });
 
-    const result = await service.findAllByUser('507f191e810c19729de860ea');
+    const result = await service.findAllByUser(USER_ID, KNOWLEDGE_BASE_ID);
 
     expect(sortMock).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(knowledgeBasesServiceMock.assertOwnedKnowledgeBase).toHaveBeenCalledWith(
+      USER_ID,
+      KNOWLEDGE_BASE_ID,
+    );
     expect(result).toHaveLength(2);
   });
 
@@ -167,28 +223,31 @@ describe('DocumentsService', () => {
     modelMock.findOne.mockReturnValue(createExecQuery(null));
 
     await expect(
-      service.findOneByUser('507f191e810c19729de860ea', '507f1f77bcf86cd799439111'),
+      service.findOneByUser(USER_ID, '507f1f77bcf86cd799439111'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('deletes document record even when file is missing', async () => {
-    modelMock.findOneAndDelete.mockReturnValue(createExecQuery(createDocumentDoc()));
+    modelMock.findOneAndDelete.mockReturnValue(
+      createExecQuery(createDocumentDoc()),
+    );
     const removeFileSpy = jest
       .spyOn(documentFileUtil, 'removeStoredDocumentFile')
       .mockResolvedValue(undefined);
 
     await expect(
-      service.remove('507f191e810c19729de860ea', '507f1f77bcf86cd799439111'),
+      service.remove(USER_ID, '507f1f77bcf86cd799439111'),
     ).resolves.toBeUndefined();
 
     expect(removeFileSpy).toHaveBeenCalled();
+    expect(chunkModelMock.deleteMany).toHaveBeenCalled();
   });
 
   it('returns not found when deleting non-owned document', async () => {
     modelMock.findOneAndDelete.mockReturnValue(createExecQuery(null));
 
     await expect(
-      service.remove('507f191e810c19729de860ea', '507f1f77bcf86cd799439111'),
+      service.remove(USER_ID, '507f1f77bcf86cd799439111'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

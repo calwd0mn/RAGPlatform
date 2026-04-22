@@ -2,7 +2,6 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RetrievedChunk } from '../interfaces/retrieved-chunk.interface';
 import { AtlasVectorRetrievalProvider } from './providers/atlas-vector-retrieval.provider';
-import { DebugExperimentRetrievalProvider } from './providers/debug-experiment-retrieval.provider';
 import { LocalCosineRetrievalProvider } from './providers/local-cosine-retrieval.provider';
 import { RagRetrievalService } from './rag-retrieval.service';
 
@@ -27,9 +26,6 @@ describe('RagRetrievalService', () => {
   let localProviderMock: {
     retrieveTopKByUser: jest.Mock;
   };
-  let debugExperimentProviderMock: {
-    retrieveTopKByExperiment: jest.Mock;
-  };
 
   const originalEnv = { ...process.env };
   const userId = '507f191e810c19729de860ea';
@@ -43,10 +39,6 @@ describe('RagRetrievalService', () => {
     localProviderMock = {
       retrieveTopKByUser: jest.fn(),
     };
-    debugExperimentProviderMock = {
-      retrieveTopKByExperiment: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RagRetrievalService,
@@ -57,10 +49,6 @@ describe('RagRetrievalService', () => {
         {
           provide: LocalCosineRetrievalProvider,
           useValue: localProviderMock,
-        },
-        {
-          provide: DebugExperimentRetrievalProvider,
-          useValue: debugExperimentProviderMock,
         },
       ],
     }).compile();

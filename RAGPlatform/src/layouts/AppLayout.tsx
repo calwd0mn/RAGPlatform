@@ -1,6 +1,4 @@
 import {
-  BugOutlined,
-  ExperimentOutlined,
   FileTextOutlined,
   LogoutOutlined,
   MessageOutlined,
@@ -24,14 +22,9 @@ export function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  const activeTabKey =
-    location.pathname.startsWith("/app/documents")
-      ? "/app/documents"
-      : location.pathname.startsWith("/app/debug/results")
-        ? "/app/debug/results"
-        : location.pathname.startsWith("/app/debug")
-          ? "/app/debug"
-        : "/app/chat";
+  const activeTabKey = location.pathname.startsWith("/app/documents")
+    ? "/app/documents"
+    : "/app/chat";
 
   return (
     <Layout className={styles.layout}>
@@ -45,9 +38,16 @@ export function AppLayout() {
             <KnowledgeBaseSwitcher />
             <Space size={8}>
               <Avatar size="small" icon={<UserOutlined />} />
-              <Typography.Text>{currentUser?.username ?? "未命名用户"}</Typography.Text>
+              <Typography.Text>
+                {currentUser?.username ?? "未命名用户"}
+              </Typography.Text>
             </Space>
-            <Button icon={<LogoutOutlined />} onClick={handleLogout} type="default" danger>
+            <Button
+              icon={<LogoutOutlined />}
+              onClick={handleLogout}
+              type="default"
+              danger
+            >
               退出登录
             </Button>
           </Space>
@@ -64,24 +64,6 @@ export function AppLayout() {
                 <Space size={6}>
                   <MessageOutlined />
                   对话
-                </Space>
-              ),
-            },
-            {
-              key: "/app/debug",
-              label: (
-                <Space size={6}>
-                  <BugOutlined />
-                  策略设置
-                </Space>
-              ),
-            },
-            {
-              key: "/app/debug/results",
-              label: (
-                <Space size={6}>
-                  <ExperimentOutlined />
-                  RAG 调试
                 </Space>
               ),
             },

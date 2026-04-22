@@ -43,9 +43,9 @@ describe('DocumentsController', () => {
     service.createFromUpload.mockResolvedValue({});
     const file = { originalname: 'a.txt' } as UploadedDocumentFile;
 
-    await controller.upload(user, file);
+    await controller.upload(user, { knowledgeBaseId: 'kb-1' }, file);
 
-    expect(service.createFromUpload).toHaveBeenCalledWith('u1', file);
+    expect(service.createFromUpload).toHaveBeenCalledWith('u1', 'kb-1', file);
   });
 
   it('forwards list query to service with current user id', async () => {
@@ -56,9 +56,9 @@ describe('DocumentsController', () => {
     };
     service.findAllByUser.mockResolvedValue([]);
 
-    await controller.findAll(user);
+    await controller.findAll(user, { knowledgeBaseId: 'kb-1' });
 
-    expect(service.findAllByUser).toHaveBeenCalledWith('u1');
+    expect(service.findAllByUser).toHaveBeenCalledWith('u1', 'kb-1');
   });
 
   it('forwards delete to service with route param id', async () => {

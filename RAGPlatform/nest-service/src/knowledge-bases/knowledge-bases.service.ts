@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ChunkSplitterType } from '../ingestion/chunk-strategy/chunk-strategy.types';
 import {
   Conversation,
   ConversationDocument,
@@ -17,15 +16,7 @@ import {
   DocumentDocument,
 } from '../documents/schemas/document.schema';
 import { Chunk, ChunkDocument } from '../ingestion/schemas/chunk.schema';
-import {
-  DebugExperiment,
-  DebugExperimentDocument,
-} from '../schemas/debug-experiment.schema';
-import {
-  DebugExperimentChunk,
-  DebugExperimentChunkDocument,
-} from '../schemas/debug-experiment-chunk.schema';
-import { RagRun, RagRunDocument } from '../schemas/rag-run.schema';
+import { ChunkSplitterType } from '../ingestion/splitters/chunk-splitter.type';
 import { CreateKnowledgeBaseDto } from './dto/create-knowledge-base.dto';
 import { UpdateKnowledgeBaseDto } from './dto/update-knowledge-base.dto';
 import { KnowledgeBaseResponse } from './interfaces/knowledge-base-response.interface';
@@ -47,12 +38,6 @@ export class KnowledgeBasesService {
     private readonly chunkModel: Model<ChunkDocument>,
     @InjectModel(Conversation.name)
     private readonly conversationModel: Model<ConversationDocument>,
-    @InjectModel(RagRun.name)
-    private readonly ragRunModel: Model<RagRunDocument>,
-    @InjectModel(DebugExperiment.name)
-    private readonly debugExperimentModel: Model<DebugExperimentDocument>,
-    @InjectModel(DebugExperimentChunk.name)
-    private readonly debugExperimentChunkModel: Model<DebugExperimentChunkDocument>,
   ) {}
 
   async findAllByUser(userId: string): Promise<KnowledgeBaseResponse[]> {
@@ -173,14 +158,7 @@ export class KnowledgeBasesService {
     }
 
     const userObjectId = this.toObjectId(userId);
-    const [
-      documentCount,
-      chunkCount,
-      conversationCount,
-      ragRunCount,
-      debugExperimentCount,
-      debugExperimentChunkCount,
-    ] = await Promise.all([
+    const [documentCount, chunkCount, conversationCount] = await Promise.all([
       this.documentModel.countDocuments({
         userId: userObjectId,
         knowledgeBaseId: row._id,
@@ -193,37 +171,15 @@ export class KnowledgeBasesService {
         userId: userObjectId,
         knowledgeBaseId: row._id,
       }),
-      this.ragRunModel.countDocuments({
-        userId: userObjectId,
-        knowledgeBaseId: row._id,
-      }),
-      this.debugExperimentModel.countDocuments({
-        userId: userObjectId,
-        knowledgeBaseId: row._id,
-      }),
-      this.debugExperimentChunkModel.countDocuments({
-        userId: userObjectId,
-        knowledgeBaseId: row._id,
-      }),
     ]);
 
-    if (
-      documentCount > 0 ||
-      chunkCount > 0 ||
-      conversationCount > 0 ||
-      ragRunCount > 0 ||
-      debugExperimentCount > 0 ||
-      debugExperimentChunkCount > 0
-    ) {
+    if (documentCount > 0 || chunkCount > 0 || conversationCount > 0) {
       throw new BadRequestException(
         [
           'Knowledge base is not empty',
           `documents=${documentCount}`,
           `chunks=${chunkCount}`,
           `conversations=${conversationCount}`,
-          `ragRuns=${ragRunCount}`,
-          `debugExperiments=${debugExperimentCount}`,
-          `debugExperimentChunks=${debugExperimentChunkCount}`,
         ].join('; '),
       );
     }
@@ -316,24 +272,6 @@ export class KnowledgeBasesService {
         )
         .exec(),
       this.conversationModel
-        .updateMany(
-          { userId, knowledgeBaseId: { $exists: false } },
-          { knowledgeBaseId },
-        )
-        .exec(),
-      this.ragRunModel
-        .updateMany(
-          { userId, knowledgeBaseId: { $exists: false } },
-          { knowledgeBaseId },
-        )
-        .exec(),
-      this.debugExperimentModel
-        .updateMany(
-          { userId, knowledgeBaseId: { $exists: false } },
-          { knowledgeBaseId },
-        )
-        .exec(),
-      this.debugExperimentChunkModel
         .updateMany(
           { userId, knowledgeBaseId: { $exists: false } },
           { knowledgeBaseId },

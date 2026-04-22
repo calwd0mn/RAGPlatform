@@ -41,28 +41,6 @@ interface RagAskResponseBody {
   conversationId: string;
 }
 
-interface PromptCurrentResponseBody {
-  id: string;
-  version: string;
-  versionedId: string;
-}
-
-interface RagRunsResponseBody {
-  items: Array<{
-    runId: string;
-    runType: 'ask' | 'debug-render' | 'debug-retrieve';
-    status: 'success' | 'error';
-  }>;
-}
-
-interface ChunksDebugResponseBody {
-  total: number;
-  items: Array<{
-    chunkId: string;
-    contentPreview: string;
-  }>;
-}
-
 describe('Delivery Smoke (e2e)', () => {
   let app: INestApplication;
   let connection: Connection;
@@ -73,8 +51,6 @@ describe('Delivery Smoke (e2e)', () => {
   let originalIngestionEmbeddingsProvider: string | undefined;
   let originalRagRetrievalProvider: string | undefined;
   let originalRagChatProvider: string | undefined;
-  let originalRagDebugEnabled: string | undefined;
-  let originalRagDebugAccessToken: string | undefined;
 
   beforeAll(async () => {
     originalNodeEnv = process.env.NODE_ENV;
@@ -84,8 +60,6 @@ describe('Delivery Smoke (e2e)', () => {
       process.env.INGESTION_EMBEDDINGS_PROVIDER;
     originalRagRetrievalProvider = process.env.RAG_RETRIEVAL_PROVIDER;
     originalRagChatProvider = process.env.RAG_CHAT_PROVIDER;
-    originalRagDebugEnabled = process.env.RAG_DEBUG_ENABLED;
-    originalRagDebugAccessToken = process.env.RAG_DEBUG_ACCESS_TOKEN;
 
     process.env.NODE_ENV = 'test';
     process.env.MONGODB_URI =
@@ -97,8 +71,6 @@ describe('Delivery Smoke (e2e)', () => {
     process.env.INGESTION_EMBEDDINGS_PROVIDER = 'deterministic';
     process.env.RAG_RETRIEVAL_PROVIDER = 'local';
     process.env.RAG_CHAT_PROVIDER = 'fake';
-    process.env.RAG_DEBUG_ENABLED = 'true';
-    process.env.RAG_DEBUG_ACCESS_TOKEN = 'delivery-debug-token';
     documentsUploadDir = process.env.DOCUMENTS_UPLOAD_DIR;
 
     const { AppModule } = await import('../src/app.module');
@@ -165,16 +137,6 @@ describe('Delivery Smoke (e2e)', () => {
     } else {
       process.env.RAG_CHAT_PROVIDER = originalRagChatProvider;
     }
-    if (originalRagDebugEnabled === undefined) {
-      delete process.env.RAG_DEBUG_ENABLED;
-    } else {
-      process.env.RAG_DEBUG_ENABLED = originalRagDebugEnabled;
-    }
-    if (originalRagDebugAccessToken === undefined) {
-      delete process.env.RAG_DEBUG_ACCESS_TOKEN;
-    } else {
-      process.env.RAG_DEBUG_ACCESS_TOKEN = originalRagDebugAccessToken;
-    }
   });
 
   async function registerAndGetToken(suffix: string): Promise<string> {
@@ -222,7 +184,6 @@ describe('Delivery Smoke (e2e)', () => {
 
   it('covers the delivery-closure smoke flow', async () => {
     const suffix = Date.now().toString();
-    const debugToken = process.env.RAG_DEBUG_ACCESS_TOKEN ?? '';
     const token = await registerAndGetToken(suffix);
     const conversationId = await createConversation(token);
     const documentId = await uploadDocument(token, suffix);
@@ -250,60 +211,5 @@ describe('Delivery Smoke (e2e)', () => {
     expect(Array.isArray(askBody.citations)).toBe(true);
     expect(askBody.trace.topK).toBe(3);
     expect(typeof askBody.trace.retrievedCount).toBe('number');
-
-    await request(app.getHttpServer())
-      .get('/rag/debug/prompt/current')
-      .set('Authorization', `Bearer ${token}`)
-      .expect(404);
-
-    const promptCurrentResponse = await request(app.getHttpServer())
-      .get('/rag/debug/prompt/current')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-debug-token', debugToken)
-      .expect(200);
-    const promptCurrentBody =
-      promptCurrentResponse.body as PromptCurrentResponseBody;
-    expect(promptCurrentBody.id.length).toBeGreaterThan(0);
-    expect(promptCurrentBody.version.length).toBeGreaterThan(0);
-    expect(promptCurrentBody.versionedId.length).toBeGreaterThan(0);
-
-    await request(app.getHttpServer())
-      .post('/rag/debug/retrieve')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-debug-token', debugToken)
-      .send({
-        query: 'delivery smoke retrieve',
-        topK: 3,
-      })
-      .expect(201);
-
-    await request(app.getHttpServer())
-      .post('/rag/debug/prompt/render')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-debug-token', debugToken)
-      .send({
-        query: 'delivery smoke render',
-        topK: 3,
-        conversationId,
-      })
-      .expect(201);
-
-    const runsResponse = await request(app.getHttpServer())
-      .get('/rag/debug/runs?limit=20&offset=0')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-debug-token', debugToken)
-      .expect(200);
-    const runsBody = runsResponse.body as RagRunsResponseBody;
-    expect(runsBody.items.length).toBeGreaterThanOrEqual(2);
-
-    const chunksDebugResponse = await request(app.getHttpServer())
-      .get('/chunks/debug?limit=20&offset=0&query=delivery')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-debug-token', debugToken)
-      .expect(200);
-    const chunksDebugBody = chunksDebugResponse.body as ChunksDebugResponseBody;
-    expect(chunksDebugBody.total).toBeGreaterThan(0);
-    expect(chunksDebugBody.items.length).toBeGreaterThan(0);
-    expect(chunksDebugBody.items[0].chunkId.length).toBeGreaterThan(0);
   });
 });

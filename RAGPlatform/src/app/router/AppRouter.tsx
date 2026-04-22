@@ -11,16 +11,6 @@ const ChatWorkbenchPage = lazy(() =>
     default: module.ChatWorkbenchPage,
   })),
 );
-const DebugWorkbenchPage = lazy(() =>
-  import("../../pages/debug/DebugWorkbenchPage").then((module) => ({
-    default: module.DebugWorkbenchPage,
-  })),
-);
-const DebugResultPage = lazy(() =>
-  import("../../pages/debug/DebugResultPage").then((module) => ({
-    default: module.DebugResultPage,
-  })),
-);
 const DocumentsPage = lazy(() =>
   import("../../pages/documents/DocumentsPage").then((module) => ({
     default: module.DocumentsPage,
@@ -69,8 +59,6 @@ export function AppRouter() {
               path="chat/:conversationId"
               element={<ChatWorkbenchPage />}
             />
-            <Route path="debug" element={<DebugWorkbenchPage />} />
-            <Route path="debug/results" element={<DebugResultPage />} />
             <Route path="documents" element={<DocumentsPage />} />
           </Route>
         </Route>

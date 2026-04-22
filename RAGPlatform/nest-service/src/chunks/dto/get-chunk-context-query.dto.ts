@@ -6,10 +6,6 @@ export class GetChunkContextQueryDto {
   knowledgeBaseId!: string;
 
   @IsOptional()
-  @IsMongoId()
-  experimentId?: string;
-
-  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

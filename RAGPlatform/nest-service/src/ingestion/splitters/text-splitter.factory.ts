@@ -5,7 +5,7 @@ import {
   TextSplitter,
   TokenTextSplitter,
 } from '@langchain/textsplitters';
-import { ChunkSplitterType } from '../chunk-strategy/chunk-strategy.types';
+import { ChunkSplitterType } from './chunk-splitter.type';
 
 const DEFAULT_CHUNK_SIZE = 800;
 const DEFAULT_CHUNK_OVERLAP = 150;
@@ -127,7 +127,10 @@ export class TextSplitterFactory {
     return Array.from(SENTENCE_BOUNDARY_SEPARATORS);
   }
 
-  private readPositiveInteger(input: string | undefined, fallback: number): number {
+  private readPositiveInteger(
+    input: string | undefined,
+    fallback: number,
+  ): number {
     const parsed = Number.parseInt(input ?? '', 10);
     if (Number.isInteger(parsed) && parsed > 0) {
       return parsed;
@@ -135,7 +138,10 @@ export class TextSplitterFactory {
     return fallback;
   }
 
-  private readNonNegativeInteger(input: string | undefined, fallback: number): number {
+  private readNonNegativeInteger(
+    input: string | undefined,
+    fallback: number,
+  ): number {
     const parsed = Number.parseInt(input ?? '', 10);
     if (Number.isInteger(parsed) && parsed >= 0) {
       return parsed;
@@ -148,7 +154,11 @@ export class TextSplitterFactory {
     fallback: ChunkSplitterType,
   ): ChunkSplitterType {
     const normalized = (input ?? '').trim().toLowerCase();
-    if (normalized === 'recursive' || normalized === 'markdown' || normalized === 'token') {
+    if (
+      normalized === 'recursive' ||
+      normalized === 'markdown' ||
+      normalized === 'token'
+    ) {
       return normalized;
     }
     return fallback;

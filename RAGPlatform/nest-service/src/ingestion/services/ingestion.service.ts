@@ -70,12 +70,12 @@ export class IngestionService {
     }
 
     const lockedDocument = document;
-    // 
+    // 加载文件
     try {
       const loadedDocuments = await this.documentLoaderFactory.load({
         storagePath: lockedDocument.storagePath,
         originalName: lockedDocument.originalName,
-        mimeType: lockedDocument.mimeType,
+        mimeType: lockedDocument.mimeType, // Document Type
       });
 
       if (loadedDocuments.length === 0) {

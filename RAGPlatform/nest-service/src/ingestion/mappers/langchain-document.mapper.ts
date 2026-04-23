@@ -20,31 +20,39 @@ interface MapLoadedDocumentsInput {
 
 @Injectable()
 export class LangchainDocumentMapper {
-  mapLoadedDocuments(input: MapLoadedDocumentsInput): LangChainDocument<ChunkMetadata>[] {
-    return input.loadedDocuments.map((loadedDocument: LangChainDocument): LangChainDocument<ChunkMetadata> => {
-      const metadataProbe = loadedDocument.metadata as LoaderMetadataProbe;
-      const pageFromLoc =
-        metadataProbe.loc && typeof metadataProbe.loc.pageNumber === 'number'
-          ? metadataProbe.loc.pageNumber
-          : undefined;
+  mapLoadedDocuments(
+    input: MapLoadedDocumentsInput,
+  ): LangChainDocument<ChunkMetadata>[] {
+    return input.loadedDocuments.map(
+      (loadedDocument: LangChainDocument): LangChainDocument<ChunkMetadata> => {
+        const metadataProbe = loadedDocument.metadata as LoaderMetadataProbe;
+        const pageFromLoc =
+          metadataProbe.loc && typeof metadataProbe.loc.pageNumber === 'number'
+            ? metadataProbe.loc.pageNumber
+            : undefined;
 
-      const page = typeof metadataProbe.page === 'number' ? metadataProbe.page : pageFromLoc;
-      const source =
-        typeof metadataProbe.source === 'string' && metadataProbe.source.trim().length > 0
-          ? metadataProbe.source
-          : undefined;
+        const page =
+          typeof metadataProbe.page === 'number'
+            ? metadataProbe.page
+            : pageFromLoc;
+        const source =
+          typeof metadataProbe.source === 'string' &&
+          metadataProbe.source.trim().length > 0
+            ? metadataProbe.source
+            : undefined;
 
-      return new LangChainDocument<ChunkMetadata>({
-        pageContent: loadedDocument.pageContent,
-        metadata: {
-          page,
-          source,
-          originalName: input.originalName,
-          mimeType: input.mimeType,
-          documentId: input.documentId,
-          userId: input.userId,
-        },
-      });
-    });
+        return new LangChainDocument<ChunkMetadata>({
+          pageContent: loadedDocument.pageContent,
+          metadata: {
+            page,
+            source,
+            originalName: input.originalName,
+            mimeType: input.mimeType,
+            documentId: input.documentId,
+            userId: input.userId,
+          },
+        });
+      },
+    );
   }
 }

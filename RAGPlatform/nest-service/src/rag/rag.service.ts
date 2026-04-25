@@ -98,6 +98,7 @@ export class RagService {
     dto: AskRagDto,
     options: AskExecutionOptions,
   ): Promise<RagAnswer> {
+    // 验证query
     const query = dto.query.trim();
     if (query.length === 0) {
       throw new BadRequestException('query must not be empty');
@@ -111,18 +112,19 @@ export class RagService {
     let knowledgeBaseId = '';
 
     try {
+      // 查会话，拿知识库id
       const conversation = await this.conversationsService.findOneByUser(
         userId,
         dto.conversationId,
       );
       knowledgeBaseId = conversation.knowledgeBaseId;
-
+      // 拿历史消息(不区分角色)
       const historyItems = await this.findRecentHistory(
         userId,
         dto.conversationId,
         HISTORY_LIMIT,
       );
-
+      // message入库
       const userMessage = await this.createMessageAndTouch({
         userId,
         conversationId: dto.conversationId,
@@ -131,7 +133,7 @@ export class RagService {
         citations: [],
         trace: undefined,
       });
-
+      // 进入检索
       const retrievalOutput =
         await this.ragRetrievalService.retrieveTopKByQueryWithProvider({
           userId,
@@ -296,7 +298,8 @@ export class RagService {
         question: chainInput.question,
       };
     });
-
+    // 逻辑等同于
+    // return formatPromptInput.pipe(prompt).pipe(model).pipe(parser);
     return RunnableSequence.from([
       formatPromptInput,
       prompt,
@@ -387,6 +390,7 @@ export class RagService {
   }): Promise<MessageDocument> {
     if (!(await this.canUseTransaction())) {
       const savedMessage = await this.createMessage(input);
+      // 更新conversation的lastupdate
       await this.conversationsService.touchLastMessageAt(
         input.userId,
         input.conversationId,

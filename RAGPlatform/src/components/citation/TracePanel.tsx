@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Alert, Descriptions, Empty, Space, Tag } from "antd";
 import type { ChatMessage } from "../../types/chat";
 import styles from "./TracePanel.module.css";
@@ -6,7 +7,9 @@ interface TracePanelProps {
   message?: ChatMessage;
 }
 
-export function TracePanel({ message }: TracePanelProps) {
+export const TracePanel = memo(function TracePanel({
+  message,
+}: TracePanelProps) {
   if (!message) {
     return (
       <Empty
@@ -83,4 +86,4 @@ export function TracePanel({ message }: TracePanelProps) {
       </Descriptions>
     </Space>
   );
-}
+});

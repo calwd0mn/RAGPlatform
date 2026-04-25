@@ -1,5 +1,5 @@
+import { memo, useEffect, useRef } from "react";
 import { Alert, Avatar, Empty, Space, Spin, Typography } from "antd";
-import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../../types/chat";
 import type { CitationWorkspaceSelection } from "../../types/citation";
 import type { RagCitation } from "../../types/rag";
@@ -20,7 +20,7 @@ interface ChatMessageListProps {
   onCitationSelect?: (message: ChatMessage, citation: RagCitation, citationIndex: number) => void;
 }
 
-export function ChatMessageList({
+export const ChatMessageList = memo(function ChatMessageList({
   items,
   loading = false,
   errorMessage,
@@ -104,4 +104,4 @@ export function ChatMessageList({
       <div ref={endRef} />
     </div>
   );
-}
+});

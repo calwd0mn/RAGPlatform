@@ -1,6 +1,6 @@
+import { memo, useMemo, useState } from "react";
 import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Flex, Input, Spin } from "antd";
-import { useMemo, useState } from "react";
 import type { ConversationItem } from "../../types/chat";
 import { ConversationList } from "./ConversationList";
 import styles from "./ConversationSidebar.module.css";
@@ -19,7 +19,7 @@ interface ConversationSidebarProps {
   onDelete: (conversation: ConversationItem) => void;
 }
 
-export function ConversationSidebar({
+export const ConversationSidebar = memo(function ConversationSidebar({
   conversations,
   activeId,
   isLoading,
@@ -73,7 +73,10 @@ export function ConversationSidebar({
 
       {!isLoading && !isError && !hasConversation ? (
         <div className={styles.listScroll}>
-          <Empty description="暂无会话，点击上方按钮新建" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty
+            description="暂无会话，点击上方按钮新建"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         </div>
       ) : null}
 
@@ -100,4 +103,4 @@ export function ConversationSidebar({
       ) : null}
     </Flex>
   );
-}
+});

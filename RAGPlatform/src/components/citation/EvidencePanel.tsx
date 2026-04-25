@@ -1,5 +1,5 @@
+import { memo, useMemo } from "react";
 import { Alert, Empty, Space, Tag, Typography } from "antd";
-import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ChatMessage } from "../../types/chat";
 import type { CitationWorkspaceSelection } from "../../types/citation";
@@ -15,7 +15,7 @@ interface EvidencePanelProps {
   onCitationSelect: (message: ChatMessage, citationIndex: number) => void;
 }
 
-export function EvidencePanel({
+export const EvidencePanel = memo(function EvidencePanel({
   conversationId,
   message,
   selectedCitation,
@@ -144,4 +144,4 @@ export function EvidencePanel({
       </Space>
     </Space>
   );
-}
+});

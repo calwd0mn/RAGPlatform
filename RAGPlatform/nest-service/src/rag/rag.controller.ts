@@ -18,7 +18,7 @@ interface StreamErrorPayload {
 @UseGuards(JwtAuthGuard)
 @Controller('rag')
 export class RagController {
-  constructor(private readonly ragService: RagService) {}
+  constructor(private readonly ragService: RagService) { }
 
   @Post('ask')
   ask(@CurrentUser() user: AuthUser, @Body() dto: AskRagDto): Promise<RagAnswer> {
@@ -37,8 +37,9 @@ export class RagController {
         streamAbortController.abort();
       }
     };
+    // once(event,listner)只执行一次,监听evnet，执行监听器函数
     response.once('close', abortStreaming);
-
+    // sse握手
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -48,8 +49,9 @@ export class RagController {
 
     try {
       const result = await this.ragService.askStream(user.id, dto, {
-        signal: streamAbortController.signal,
+        signal: streamAbortController.signal, // 业务层和控制器共享取消信号
         onToken: (token: string): void => {
+          // 每次触发都要坐两层保护 aborted & ended
           if (streamAbortController.signal.aborted || response.writableEnded) {
             return;
           }
@@ -68,13 +70,14 @@ export class RagController {
         message: this.resolveErrorMessage(error),
       });
     } finally {
+      // 解绑监听，关闭流
       response.removeListener('close', abortStreaming);
       if (!response.writableEnded) {
         response.end();
       }
     }
   }
-
+  // 手写回前端
   private writeEvent<TPayload>(response: Response, event: string, payload: TPayload): void {
     response.write(`event: ${event}\n`);
     response.write(`data: ${JSON.stringify(payload)}\n\n`);

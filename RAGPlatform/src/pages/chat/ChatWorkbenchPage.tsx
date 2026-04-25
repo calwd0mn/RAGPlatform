@@ -1,7 +1,6 @@
 import { AxiosError } from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Alert, Col, Row, Tabs, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo } from "react";
+import { Alert, Col, Row, Tabs, Typography } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatInputBox } from "../../components/chat/ChatInputBox";
 import { ChatMessageList } from "../../components/chat/ChatMessageList";
@@ -11,21 +10,14 @@ import { PageSectionCard } from "../../components/common/PageSectionCard";
 import { RenameConversationModal } from "../../components/conversation/RenameConversationModal";
 import { ConversationSidebar } from "../../components/conversation/ConversationSidebar";
 import { KnowledgeBaseStatusBar } from "../../components/document/KnowledgeBaseStatusBar";
-import { queryKeys } from "../../constants/queryKeys";
+import { useActiveAssistantWorkspace } from "../../hooks/chat/useActiveAssistantWorkspace";
+import { useChatStreaming } from "../../hooks/chat/useChatStreaming";
+import { useConversationActions } from "../../hooks/chat/useConversationActions";
 import { useConversationList } from "../../hooks/chat/useConversationList";
-import { useCreateConversation } from "../../hooks/chat/useCreateConversation";
-import { useDeleteConversation } from "../../hooks/chat/useDeleteConversation";
 import { useMessageList } from "../../hooks/chat/useMessageList";
-import { useUpdateConversation } from "../../hooks/chat/useUpdateConversation";
-import { askRagStream } from "../../services/rag";
 import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
-import { useCitationWorkspaceStore } from "../../stores/citation-workspace.store";
 import type { ApiErrorPayload } from "../../types/api";
-import type { ChatMessage, ConversationItem } from "../../types/chat";
-import type { RagCitation } from "../../types/rag";
 import styles from "./ChatWorkbenchPage.module.css";
-
-type EvidenceTabKey = "evidence" | "trace";
 
 function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
   if (!error?.response?.data?.message) {
@@ -35,49 +27,14 @@ function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
   return Array.isArray(message) ? message.join("；") : message;
 }
 
-function getGenericErrorMessage(error: Error): string {
-  const message = error.message.trim();
-  if (message.length === 0) {
-    return "请求失败，请稍后重试。";
-  }
-  return message;
-}
-
 export function ChatWorkbenchPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const currentKnowledgeBaseId = useKnowledgeBaseStore(
     (state) => state.currentKnowledgeBaseId,
   );
-  const [draft, setDraft] = useState("");
-  const [activePanelTab, setActivePanelTab] =
-    useState<EvidenceTabKey>("evidence");
-  const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<
-    string | null
-  >(null);
-  const [submitErrorMessage, setSubmitErrorMessage] = useState("");
-  const [renameTargetConversation, setRenameTargetConversation] =
-    useState<ConversationItem | null>(null);
-  const [deletingConversationId, setDeletingConversationId] = useState("");
-  const [isStreamingAnswer, setIsStreamingAnswer] = useState(false);
-  const [streamingAssistantMessage, setStreamingAssistantMessage] =
-    useState<ChatMessage | null>(null);
-  const streamingAbortControllerRef = useRef<AbortController | null>(null);
-  const selectedCitation = useCitationWorkspaceStore(
-    (state) => state.selectedCitation,
-  );
-  const setSelectedCitation = useCitationWorkspaceStore(
-    (state) => state.setSelectedCitation,
-  );
-  const clearSelectedCitation = useCitationWorkspaceStore(
-    (state) => state.clearSelectedCitation,
-  );
 
   const conversationListQuery = useConversationList();
-  const createConversationMutation = useCreateConversation();
-  const updateConversationMutation = useUpdateConversation();
-  const deleteConversationMutation = useDeleteConversation();
   const activeConversationId = conversationId ?? "";
   const activeConversation = useMemo(
     () =>
@@ -87,6 +44,21 @@ export function ChatWorkbenchPage() {
     [activeConversationId, conversationListQuery.data],
   );
   const messageListQuery = useMessageList(activeConversation?.id);
+  const {
+    createConversationMutation,
+    deletingConversationId,
+    handleCloseRenameConversation,
+    handleCreateConversation,
+    handleDeleteConversation,
+    handleOpenRenameConversation,
+    handleRenameConversation,
+    renameTargetConversation,
+    updateConversationMutation,
+  } = useConversationActions({
+    activeConversationId,
+    conversations: conversationListQuery.data ?? [],
+    navigate,
+  });
 
   useEffect(() => {
     if (currentKnowledgeBaseId.length === 0) {
@@ -123,361 +95,84 @@ export function ChatWorkbenchPage() {
     navigate,
   ]);
 
-  const isSubmitting = isStreamingAnswer || createConversationMutation.isPending;
   const persistedMessages = messageListQuery.data ?? [];
-  const messages = useMemo(() => {
-    if (!streamingAssistantMessage || streamingAssistantMessage.id.length === 0) {
-      return persistedMessages;
-    }
-    return [...persistedMessages, streamingAssistantMessage];
-  }, [persistedMessages, streamingAssistantMessage]);
-  const assistantMessages = useMemo(
+  const {
+    isStreamingAnswer,
+    isSubmitting,
+    streamingAssistantMessage,
+    submitErrorMessage,
+    handleAbortStreaming,
+    handleSubmit,
+  } = useChatStreaming({
+    activeConversation,
+    activeConversationId,
+    createConversation: createConversationMutation,
+    currentKnowledgeBaseId,
+    navigate,
+  });
+  const messages = useMemo(
     () =>
-      messages.filter((item): item is ChatMessage => item.role === "assistant"),
-    [messages],
+      streamingAssistantMessage
+        ? [...persistedMessages, streamingAssistantMessage]
+        : persistedMessages,
+    [persistedMessages, streamingAssistantMessage],
   );
-  const currentConversationSelectedCitation = useMemo(() => {
-    if (
-      !selectedCitation ||
-      selectedCitation.conversationId !== activeConversationId
-    ) {
-      return null;
-    }
-    return selectedCitation;
-  }, [activeConversationId, selectedCitation]);
-
-  const activeAssistantMessage = useMemo(() => {
-    if (!assistantMessages.length) {
-      return undefined;
-    }
-    if (currentConversationSelectedCitation) {
-      const matchedByCitation = assistantMessages.find(
-        (item) =>
-          item.id === currentConversationSelectedCitation.assistantMessageId,
-      );
-      if (matchedByCitation) {
-        return matchedByCitation;
-      }
-    }
-    if (activeAssistantMessageId) {
-      const matchedMessage = assistantMessages.find(
-        (item) => item.id === activeAssistantMessageId,
-      );
-      if (matchedMessage) {
-        return matchedMessage;
-      }
-    }
-    return assistantMessages[assistantMessages.length - 1];
-  }, [
-    activeAssistantMessageId,
-    assistantMessages,
+  const {
+    activeAssistantMessage,
+    activePanelTab,
     currentConversationSelectedCitation,
-  ]);
+    focusEvidencePanelForMessage,
+    handleAssistantPanelNavigate,
+    handleCitationSelect,
+    handleEvidenceCitationSelect,
+    handlePanelTabChange,
+  } = useActiveAssistantWorkspace({
+    activeConversationId,
+    messages,
+  });
 
   useEffect(() => {
-    setActiveAssistantMessageId(null);
-    setActivePanelTab("evidence");
-    clearSelectedCitation();
-    streamingAbortControllerRef.current?.abort();
-    streamingAbortControllerRef.current = null;
-    setIsStreamingAnswer(false);
-    setStreamingAssistantMessage(null);
-  }, [activeConversationId, clearSelectedCitation]);
+    if (!streamingAssistantMessage) {
+      return;
+    }
 
-  useEffect(
-    () => () => {
-      streamingAbortControllerRef.current?.abort();
-      streamingAbortControllerRef.current = null;
+    focusEvidencePanelForMessage(streamingAssistantMessage.id);
+  }, [focusEvidencePanelForMessage, streamingAssistantMessage]);
+
+  const handleSelectConversation = useCallback(
+    (nextConversationId: string) => {
+      navigate(`/app/chat/${nextConversationId}`);
     },
-    [],
+    [navigate],
   );
 
-  useEffect(() => {
-    if (!assistantMessages.length) {
-      setActiveAssistantMessageId(null);
-      return;
-    }
-
-    if (
-      activeAssistantMessageId &&
-      assistantMessages.some((item) => item.id === activeAssistantMessageId)
-    ) {
-      return;
-    }
-
-    setActiveAssistantMessageId(
-      assistantMessages[assistantMessages.length - 1].id,
-    );
-  }, [activeAssistantMessageId, assistantMessages]);
-
-  useEffect(() => {
-    if (!currentConversationSelectedCitation) {
-      return;
-    }
-
-    const matchedMessage = assistantMessages.find(
-      (item) =>
-        item.id === currentConversationSelectedCitation.assistantMessageId,
-    );
-
-    if (!matchedMessage) {
-      clearSelectedCitation();
-      return;
-    }
-
-    const citations = matchedMessage.citations ?? [];
-    if (
-      currentConversationSelectedCitation.citationIndex < 0 ||
-      currentConversationSelectedCitation.citationIndex >= citations.length
-    ) {
-      clearSelectedCitation();
-    }
-  }, [
-    assistantMessages,
-    clearSelectedCitation,
-    currentConversationSelectedCitation,
-  ]);
-
-  const handleSubmit = async () => {
-    const query = draft.trim();
-    if (!query || isSubmitting) {
-      return;
-    }
-    if (currentKnowledgeBaseId.length === 0) {
-      setSubmitErrorMessage("请先选择知识库。");
-      return;
-    }
-    if (activeConversationId && !activeConversation) {
-      setSubmitErrorMessage("当前会话不属于已选知识库，已为你切换回当前知识库。");
-      navigate("/app/chat", { replace: true });
-      return;
-    }
-
-    setSubmitErrorMessage("");
-    let targetConversationId = activeConversationId;
-    let shouldRefreshAfterStreamFailure = false;
-
-    try {
-      if (!targetConversationId) {
-        const createdConversation =
-          await createConversationMutation.mutateAsync({});
-        targetConversationId = createdConversation.id;
-        navigate(`/app/chat/${createdConversation.id}`);
-      }
-
-      const tempAssistantMessageId = `stream-${Date.now()}`;
-      const createdAtLabel = new Date().toLocaleString("zh-CN", {
-        hour12: false,
-      });
-      const streamController = new AbortController();
-      streamingAbortControllerRef.current?.abort();
-      streamingAbortControllerRef.current = streamController;
-      setIsStreamingAnswer(true);
-      setStreamingAssistantMessage({
-        id: tempAssistantMessageId,
-        role: "assistant",
-        content: "正在生成...",
-        createdAt: createdAtLabel,
-        citations: [],
-        trace: undefined,
-      });
-      setActiveAssistantMessageId(tempAssistantMessageId);
-      setActivePanelTab("evidence");
-      clearSelectedCitation();
-      setDraft("");
-      shouldRefreshAfterStreamFailure = true;
-
-      const result = await askRagStream(
-        {
-          conversationId: targetConversationId,
-          query,
-        },
-        {
-          signal: streamController.signal,
-          onToken: (token) => {
-            setStreamingAssistantMessage((previous) => {
-              if (!previous || previous.id !== tempAssistantMessageId) {
-                return previous;
-              }
-              return {
-                ...previous,
-                content:
-                  previous.content === "正在生成..."
-                    ? token
-                    : `${previous.content}${token}`,
-              };
-            });
-          },
-        },
-      );
-
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.messages.list(result.conversationId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
-        }),
-      ]);
-
-      setActiveAssistantMessageId(result.assistantMessageId);
-      setActivePanelTab("evidence");
-      clearSelectedCitation();
-      setStreamingAssistantMessage(null);
-      shouldRefreshAfterStreamFailure = false;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        setStreamingAssistantMessage(null);
-      } else if (error instanceof AxiosError) {
-        setSubmitErrorMessage(getApiErrorMessage(error));
-        setStreamingAssistantMessage(null);
-      } else if (error instanceof Error) {
-        setSubmitErrorMessage(getGenericErrorMessage(error));
-        setStreamingAssistantMessage(null);
-      } else {
-        setSubmitErrorMessage("请求失败，请稍后重试。");
-        setStreamingAssistantMessage(null);
-      }
-    } finally {
-      if (shouldRefreshAfterStreamFailure && targetConversationId) {
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.messages.list(targetConversationId),
-          }),
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
-          }),
-        ]);
-      }
-      setIsStreamingAnswer(false);
-      streamingAbortControllerRef.current = null;
-    }
-  };
-
-  const handleAbortStreaming = () => {
-    const activeController = streamingAbortControllerRef.current;
-    if (!activeController) {
-      return;
-    }
-    activeController.abort();
-  };
-
-  const handleSelectConversation = (nextConversationId: string) => {
-    navigate(`/app/chat/${nextConversationId}`);
-  };
-
-  const handleCreateConversation = () => {
-    createConversationMutation.mutate(
-      {},
+  const evidenceTabItems = useMemo(
+    () => [
       {
-        onSuccess: (createdConversation) => {
-          navigate(`/app/chat/${createdConversation.id}`);
-        },
+        key: "evidence",
+        label: "Evidence",
+        children: (
+          <EvidencePanel
+            conversationId={activeConversationId}
+            message={activeAssistantMessage}
+            selectedCitation={currentConversationSelectedCitation}
+            onCitationSelect={handleEvidenceCitationSelect}
+          />
+        ),
       },
-    );
-  };
-
-  const handleOpenRenameConversation = (conversation: ConversationItem) => {
-    setRenameTargetConversation(conversation);
-  };
-
-  const handleCloseRenameConversation = () => {
-    setRenameTargetConversation(null);
-  };
-
-  const handleRenameConversation = async (title: string) => {
-    if (!renameTargetConversation) {
-      return;
-    }
-    await updateConversationMutation.mutateAsync({
-      conversationId: renameTargetConversation.id,
-      title,
-    });
-    setRenameTargetConversation(null);
-  };
-
-  const handleDeleteConversation = async (conversation: ConversationItem) => {
-    const currentList = conversationListQuery.data ?? [];
-    const remainingConversations = currentList.filter(
-      (item) => item.id !== conversation.id,
-    );
-
-    setDeletingConversationId(conversation.id);
-    try {
-      await deleteConversationMutation.mutateAsync({
-        conversationId: conversation.id,
-      });
-
-      if (conversation.id !== activeConversationId) {
-        return;
-      }
-
-      const nextConversation = remainingConversations[0];
-      if (nextConversation) {
-        navigate(`/app/chat/${nextConversation.id}`, { replace: true });
-        return;
-      }
-
-      navigate("/app/chat", { replace: true });
-    } catch (error) {
-      const requestError = error as AxiosError<ApiErrorPayload>;
-      message.error(getApiErrorMessage(requestError));
-    } finally {
-      setDeletingConversationId("");
-    }
-  };
-
-  const handlePanelTabChange = (nextTab: string) => {
-    if (nextTab === "evidence" || nextTab === "trace") {
-      setActivePanelTab(nextTab);
-    }
-  };
-
-  const handleAssistantPanelNavigate = (
-    messageId: string,
-    tab: EvidenceTabKey,
-  ) => {
-    setActiveAssistantMessageId(messageId);
-    setActivePanelTab(tab);
-    if (selectedCitation?.assistantMessageId !== messageId) {
-      clearSelectedCitation();
-    }
-  };
-
-  const handleCitationSelect = (
-    message: ChatMessage,
-    citation: RagCitation,
-    citationIndex: number,
-  ) => {
-    if (!activeConversationId) {
-      return;
-    }
-    setSelectedCitation({
-      conversationId: activeConversationId,
-      assistantMessageId: message.id,
-      citationIndex,
-      documentId: citation.documentId,
-      documentName: citation.documentName,
-      chunkId: citation.chunkId,
-      page: citation.page,
-      content: citation.content,
-      score: citation.score,
-    });
-    setActiveAssistantMessageId(message.id);
-    setActivePanelTab("evidence");
-  };
-
-  const handleEvidenceCitationSelect = (
-    message: ChatMessage,
-    citationIndex: number,
-  ) => {
-    const citations = message.citations ?? [];
-    const targetCitation = citations[citationIndex];
-    if (!targetCitation) {
-      return;
-    }
-    handleCitationSelect(message, targetCitation, citationIndex);
-  };
+      {
+        key: "trace",
+        label: "Trace",
+        children: <TracePanel message={activeAssistantMessage} />,
+      },
+    ],
+    [
+      activeAssistantMessage,
+      activeConversationId,
+      currentConversationSelectedCitation,
+      handleEvidenceCitationSelect,
+    ],
+  );
 
   const askErrorMessage = submitErrorMessage;
 
@@ -543,12 +238,11 @@ export function ChatWorkbenchPage() {
                   />
                 ) : null}
                 <ChatInputBox
-                  value={draft}
-                  onChange={setDraft}
                   onSubmit={handleSubmit}
                   onAbort={handleAbortStreaming}
                   submitting={isSubmitting}
                   streaming={isStreamingAnswer}
+                  resetKey={activeConversationId}
                 />
               </div>
             </div>
@@ -560,25 +254,7 @@ export function ChatWorkbenchPage() {
             <Tabs
               activeKey={activePanelTab}
               onChange={handlePanelTabChange}
-              items={[
-                {
-                  key: "evidence",
-                  label: "Evidence",
-                  children: (
-                    <EvidencePanel
-                      conversationId={activeConversationId}
-                      message={activeAssistantMessage}
-                      selectedCitation={currentConversationSelectedCitation}
-                      onCitationSelect={handleEvidenceCitationSelect}
-                    />
-                  ),
-                },
-                {
-                  key: "trace",
-                  label: "Trace",
-                  children: <TracePanel message={activeAssistantMessage} />,
-                },
-              ]}
+              items={evidenceTabItems}
             />
           </PageSectionCard>
         </Col>

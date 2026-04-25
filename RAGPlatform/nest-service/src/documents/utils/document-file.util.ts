@@ -45,11 +45,17 @@ export function getDocumentExtension(filename: string): string {
   return extname(filename).toLowerCase();
 }
 
-export function isAllowedDocumentFileType(mimeType: string, originalName: string): boolean {
+export function isAllowedDocumentFileType(
+  mimeType: string,
+  originalName: string,
+): boolean {
   const fileExtension = getDocumentExtension(originalName);
   const allowedMimeTypes: readonly string[] = DOCUMENT_ALLOWED_MIME_TYPES;
   const allowedExtensions: readonly string[] = DOCUMENT_ALLOWED_EXTENSIONS;
-  return allowedMimeTypes.includes(mimeType) && allowedExtensions.includes(fileExtension);
+  return (
+    allowedMimeTypes.includes(mimeType) &&
+    allowedExtensions.includes(fileExtension)
+  );
 }
 
 export function buildDocumentStoragePath(absoluteFilePath: string): string {
@@ -58,10 +64,14 @@ export function buildDocumentStoragePath(absoluteFilePath: string): string {
 }
 
 export function toDocumentAbsolutePath(storagePath: string): string {
-  return isAbsolute(storagePath) ? storagePath : join(process.cwd(), storagePath);
+  return isAbsolute(storagePath)
+    ? storagePath
+    : join(process.cwd(), storagePath);
 }
 
-export async function removeStoredDocumentFile(storagePath: string): Promise<void> {
+export async function removeStoredDocumentFile(
+  storagePath: string,
+): Promise<void> {
   await fsPromises.rm(toDocumentAbsolutePath(storagePath), { force: true });
 }
 
@@ -76,7 +86,9 @@ export const DOCUMENT_MULTER_OPTIONS: MulterOptions = {
       callback(null, DOCUMENT_UPLOAD_DIR);
     },
     filename: (_request, file: UploadedDocumentFile, callback): void => {
-      const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+      const normalizedOriginalName = normalizeUploadedOriginalName(
+        file.originalname,
+      );
       const fileExtension = getDocumentExtension(normalizedOriginalName);
       callback(null, `${randomUUID()}${fileExtension}`);
     },
@@ -84,8 +96,14 @@ export const DOCUMENT_MULTER_OPTIONS: MulterOptions = {
   limits: {
     fileSize: DOCUMENT_MAX_FILE_SIZE,
   },
-  fileFilter: (_request, file: UploadedDocumentFile, callback: FileFilterCallback): void => {
-    const normalizedOriginalName = normalizeUploadedOriginalName(file.originalname);
+  fileFilter: (
+    _request,
+    file: UploadedDocumentFile,
+    callback: FileFilterCallback,
+  ): void => {
+    const normalizedOriginalName = normalizeUploadedOriginalName(
+      file.originalname,
+    );
     if (!isAllowedDocumentFileType(file.mimetype, normalizedOriginalName)) {
       callback(new BadRequestException('Invalid file type'));
       return;

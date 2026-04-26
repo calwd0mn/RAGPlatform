@@ -6,6 +6,7 @@ import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { AskRagDto } from './dto/ask-rag.dto';
 import { RagAnswer } from './interfaces/rag-answer.interface';
 import { RagService } from './rag.service';
+import { RagGenerationLockService } from './services/rag-generation-lock.service';
 
 interface StreamTokenPayload {
   text: string;
@@ -18,7 +19,10 @@ interface StreamErrorPayload {
 @UseGuards(JwtAuthGuard)
 @Controller('rag')
 export class RagController {
-  constructor(private readonly ragService: RagService) { }
+  constructor(
+    private readonly ragService: RagService,
+    private readonly ragGenerationLockService: RagGenerationLockService,
+  ) {}
 
   @Post('ask')
   ask(@CurrentUser() user: AuthUser, @Body() dto: AskRagDto): Promise<RagAnswer> {
@@ -32,6 +36,11 @@ export class RagController {
     @Res() response: Response,
   ): Promise<void> {
     const streamAbortController = new AbortController();
+    const generationLockInput = {
+      userId: user.id,
+      conversationId: dto.conversationId,
+    };
+    this.ragGenerationLockService.acquire(generationLockInput);
     const abortStreaming = (): void => {
       if (!streamAbortController.signal.aborted) {
         streamAbortController.abort();
@@ -70,6 +79,7 @@ export class RagController {
         message: this.resolveErrorMessage(error),
       });
     } finally {
+      this.ragGenerationLockService.release(generationLockInput);
       // 解绑监听，关闭流
       response.removeListener('close', abortStreaming);
       if (!response.writableEnded) {

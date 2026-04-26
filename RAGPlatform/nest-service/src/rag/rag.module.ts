@@ -17,6 +17,7 @@ import { AtlasVectorRetrievalProvider } from './retrievers/providers/atlas-vecto
 import { LocalCosineRetrievalProvider } from './retrievers/providers/local-cosine-retrieval.provider';
 import { RagRetrievalService } from './retrievers/rag-retrieval.service';
 import { RagService } from './rag.service';
+import { RagGenerationLockService } from './services/rag-generation-lock.service';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { RagService } from './rag.service';
     RagChatModelFactory,
     PromptRegistry,
     PromptRenderer,
+    RagGenerationLockService,
   ],
 })
 export class RagModule {}

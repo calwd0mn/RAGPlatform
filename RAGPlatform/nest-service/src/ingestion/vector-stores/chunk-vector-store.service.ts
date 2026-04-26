@@ -11,6 +11,8 @@ import { ChunkVectorDocumentMapper } from '../mappers/chunk-vector-document.mapp
 import { Chunk, ChunkDocument } from '../schemas/chunk.schema';
 import { IngestionEmbeddingsFactory } from '../embeddings/embeddings.factory';
 
+const INGESTION_EMBEDDING_BATCH_SIZE = 64;
+
 @Injectable()
 export class ChunkVectorStoreService {
   constructor(
@@ -33,22 +35,37 @@ export class ChunkVectorStoreService {
       })
       .exec();
 
-    const documents = input.chunks.map(
-      (
-        chunkDocument: LangChainDocument<ChunkMetadata>,
-        chunkIndex: number,
-      ): LangChainDocument =>
-        this.chunkVectorDocumentMapper.toVectorDocument({
-          chunkDocument,
-          chunkIndex,
-          userId: input.userId,
-          knowledgeBaseId: input.knowledgeBaseId,
-          documentId: input.documentId,
-        }),
-    );
+    const vectorStore = this.createAtlasVectorStore();
+    let chunkCount = 0;
 
-    await this.createAtlasVectorStore().addDocuments(documents);
-    return documents.length;
+    for (
+      let batchStart = 0;
+      batchStart < input.chunks.length;
+      batchStart += INGESTION_EMBEDDING_BATCH_SIZE
+    ) {
+      const batch = input.chunks.slice(
+        batchStart,
+        batchStart + INGESTION_EMBEDDING_BATCH_SIZE,
+      );
+      const documents = batch.map(
+        (
+          chunkDocument: LangChainDocument<ChunkMetadata>,
+          batchIndex: number,
+        ): LangChainDocument =>
+          this.chunkVectorDocumentMapper.toVectorDocument({
+            chunkDocument,
+            chunkIndex: batchStart + batchIndex,
+            userId: input.userId,
+            knowledgeBaseId: input.knowledgeBaseId,
+            documentId: input.documentId,
+          }),
+      );
+
+      await vectorStore.addDocuments(documents);
+      chunkCount += documents.length;
+    }
+
+    return chunkCount;
   }
 
   async similaritySearchByVector(input: {

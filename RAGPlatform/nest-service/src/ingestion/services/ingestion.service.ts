@@ -76,6 +76,7 @@ export class IngestionService {
         storagePath: lockedDocument.storagePath,
         originalName: lockedDocument.originalName,
         mimeType: lockedDocument.mimeType, // Document Type
+        documentId: lockedDocument.id,
       });
 
       if (loadedDocuments.length === 0) {

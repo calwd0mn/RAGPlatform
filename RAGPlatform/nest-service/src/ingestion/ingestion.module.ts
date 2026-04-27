@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Document, DocumentSchema } from '../documents/schemas/document.schema';
+import { MineruModule } from '../mineru/mineru.module';
 import { ChunkMetadataBuilder } from './builders/chunk-metadata.builder';
 import { IngestionController } from './controllers/ingestion.controller';
 import { IngestionEmbeddingsFactory } from './embeddings/embeddings.factory';
@@ -18,6 +19,7 @@ import { ChunkVectorStoreService } from './vector-stores/chunk-vector-store.serv
       { name: Document.name, schema: DocumentSchema },
       { name: Chunk.name, schema: ChunkSchema },
     ]),
+    MineruModule,
   ],
   controllers: [IngestionController],
   providers: [

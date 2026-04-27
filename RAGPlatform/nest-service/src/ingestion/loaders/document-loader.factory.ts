@@ -1,36 +1,27 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Document as LangChainDocument } from '@langchain/core/documents';
-import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { promises as fsPromises } from 'fs';
 import { extname } from 'path';
 import { toDocumentAbsolutePath } from '../../documents/utils/document-file.util';
+import { MineruService } from '../../mineru/mineru.service';
 
 interface LoadDocumentInput {
   storagePath: string;
   originalName: string;
   mimeType: string;
-}
-
-async function loadPdfJsModule() {
-  const pdfJsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  return {
-    getDocument: pdfJsModule.getDocument,
-    version: pdfJsModule.version,
-  };
+  documentId: string;
 }
 
 @Injectable()
 export class DocumentLoaderFactory {
+  constructor(private readonly mineruService: MineruService) {}
+
   async load(input: LoadDocumentInput): Promise<LangChainDocument[]> {
     const absolutePath = toDocumentAbsolutePath(input.storagePath);
     const fileExtension = extname(input.originalName).toLowerCase();
 
     if (this.isPdf(input.mimeType, fileExtension)) {
-      const loader = new PDFLoader(absolutePath, {
-        splitPages: true,
-        pdfjs: loadPdfJsModule,
-      });
-      return loader.load();
+      return this.loadPdfDocumentWithMineru(input, absolutePath);
     }
 
     if (this.isTextLike(input.mimeType, fileExtension)) {
@@ -55,13 +46,40 @@ export class DocumentLoaderFactory {
     );
   }
 
-  private async loadTextDocument(absolutePath: string): Promise<LangChainDocument[]> {
-    const content = await fsPromises.readFile(absolutePath, { encoding: 'utf-8' });
+  private async loadTextDocument(
+    absolutePath: string,
+  ): Promise<LangChainDocument[]> {
+    const content = await fsPromises.readFile(absolutePath, {
+      encoding: 'utf-8',
+    });
     return [
       new LangChainDocument({
         pageContent: content,
         metadata: {
           source: absolutePath,
+        },
+      }),
+    ];
+  }
+
+  private async loadPdfDocumentWithMineru(
+    input: LoadDocumentInput,
+    absolutePath: string,
+  ): Promise<LangChainDocument[]> {
+    const parseResult = await this.mineruService.parseFile({
+      absoluteFilePath: absolutePath,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      documentId: input.documentId,
+    });
+
+    return [
+      new LangChainDocument({
+        pageContent: parseResult.markdown,
+        metadata: {
+          source: parseResult.artifactDirectoryPath,
+          parser: 'mineru',
+          parseMode: parseResult.mode,
         },
       }),
     ];

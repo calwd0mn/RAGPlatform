@@ -10,6 +10,10 @@ interface DeleteConversationVariables {
   conversationId: string;
 }
 
+interface DeleteConversationMutationContext {
+  previousConversations?: ConversationItem[];
+}
+
 function removeConversation(
   currentList: ConversationItem[] | undefined,
   conversationId: string,
@@ -23,19 +27,49 @@ export function useDeleteConversation() {
   const knowledgeBaseId = useKnowledgeBaseStore(
     (state) => state.currentKnowledgeBaseId,
   );
+  const conversationListQueryKey = queryKeys.conversations.list(knowledgeBaseId);
 
-  return useMutation<void, AxiosError<ApiErrorPayload>, DeleteConversationVariables>({
+  return useMutation<
+    void,
+    AxiosError<ApiErrorPayload>,
+    DeleteConversationVariables,
+    DeleteConversationMutationContext
+  >({
     mutationFn: (variables) => deleteConversation(variables.conversationId),
-    onSuccess: async (_, variables) => {
+    onMutate: async (
+      variables,
+    ): Promise<DeleteConversationMutationContext> => {
+      await queryClient.cancelQueries({
+        queryKey: conversationListQueryKey,
+      });
+
+      const previousConversations =
+        queryClient.getQueryData<ConversationItem[]>(conversationListQueryKey);
+
       queryClient.setQueryData<ConversationItem[]>(
-        queryKeys.conversations.list(knowledgeBaseId),
-        (currentList) => removeConversation(currentList, variables.conversationId),
+        conversationListQueryKey,
+        (currentList) =>
+          removeConversation(currentList, variables.conversationId),
       );
+
+      return { previousConversations };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousConversations) {
+        queryClient.setQueryData<ConversationItem[]>(
+          conversationListQueryKey,
+          context.previousConversations,
+        );
+      }
+    },
+    onSuccess: async (_, variables) => {
       queryClient.removeQueries({
         queryKey: queryKeys.messages.list(variables.conversationId),
       });
+    },
+    onSettled: async () => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.list(knowledgeBaseId),
+        queryKey: conversationListQueryKey,
       });
     },
   });

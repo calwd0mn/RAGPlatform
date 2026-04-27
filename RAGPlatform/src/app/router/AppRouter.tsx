@@ -16,6 +16,11 @@ const DocumentsPage = lazy(() =>
     default: module.DocumentsPage,
   })),
 );
+const WorkflowPage = lazy(() =>
+  import("../../pages/workflow/WorkflowPage").then((module) => ({
+    default: module.WorkflowPage,
+  })),
+);
 const LoginPage = lazy(() =>
   import("../../pages/login/LoginPage").then((module) => ({
     default: module.LoginPage,
@@ -60,6 +65,7 @@ export function AppRouter() {
               element={<ChatWorkbenchPage />}
             />
             <Route path="documents" element={<DocumentsPage />} />
+            <Route path="workflow" element={<WorkflowPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/app/chat" replace />} />

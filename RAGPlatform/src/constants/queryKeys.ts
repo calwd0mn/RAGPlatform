@@ -33,4 +33,8 @@ export const queryKeys = {
     traces: (conversationId: string) =>
       ["rag", "traces", conversationId] as const,
   },
+  workflows: {
+    current: (knowledgeBaseId: string) =>
+      ["workflows", "current", knowledgeBaseId] as const,
+  },
 };

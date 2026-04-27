@@ -1,5 +1,6 @@
 import {
   FileTextOutlined,
+  NodeIndexOutlined,
   LogoutOutlined,
   MessageOutlined,
   UserOutlined,
@@ -24,6 +25,8 @@ export function AppLayout() {
 
   const activeTabKey = location.pathname.startsWith("/app/documents")
     ? "/app/documents"
+    : location.pathname.startsWith("/app/workflow")
+      ? "/app/workflow"
     : "/app/chat";
 
   return (
@@ -73,6 +76,15 @@ export function AppLayout() {
                 <Space size={6}>
                   <FileTextOutlined />
                   文档
+                </Space>
+              ),
+            },
+            {
+              key: "/app/workflow",
+              label: (
+                <Space size={6}>
+                  <NodeIndexOutlined />
+                  工作流
                 </Space>
               ),
             },

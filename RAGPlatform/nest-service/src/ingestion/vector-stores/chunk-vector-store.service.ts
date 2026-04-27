@@ -13,6 +13,10 @@ import { IngestionEmbeddingsFactory } from '../embeddings/embeddings.factory';
 
 const INGESTION_EMBEDDING_BATCH_SIZE = 64;
 
+interface MongooseNativeCollectionHolder {
+  collection: Collection<MongoDocument>;
+}
+
 @Injectable()
 export class ChunkVectorStoreService {
   constructor(
@@ -104,7 +108,9 @@ export class ChunkVectorStoreService {
 
   private createAtlasVectorStore(): MongoDBAtlasVectorSearch {
     const config = getRagRetrievalConfig();
-    const collection = this.chunkModel.collection as Collection<MongoDocument>;
+    const collectionHolder = this.chunkModel
+      .collection as unknown as MongooseNativeCollectionHolder;
+    const collection = collectionHolder.collection;
     return new MongoDBAtlasVectorSearch(
       this.embeddingsFactory.createEmbeddings(),
       {
@@ -115,5 +121,4 @@ export class ChunkVectorStoreService {
       },
     );
   }
-
 }

@@ -62,6 +62,42 @@ interface GeneratedAnswerResult {
   contextStats: RagContextBuildResult;
 }
 
+export interface WorkflowRagRetrievalResult {
+  query: string;
+  topK: number;
+  chunks: RetrievedChunk[];
+  citations: RagCitation[];
+  retrievalProvider: string;
+}
+
+export interface WorkflowRagAnswerInput {
+  knowledgeBaseId: string;
+  query: string;
+  topK: number;
+  chunks: RetrievedChunk[];
+  retrievalProvider: string;
+  onToken?: (token: string) => Promise<void> | void;
+  signal?: AbortSignal;
+}
+
+export interface WorkflowRagAnswerResult {
+  answer: string;
+  citations: RagCitation[];
+  trace: {
+    knowledgeBaseId: string;
+    query: string;
+    topK: number;
+    retrievedCount: number;
+    contextChunkCount: number;
+    contextCharCount: number;
+    contextTrimmed: boolean;
+    model: string;
+    retrievalProvider: string;
+    promptVersion: string;
+    latencyMs: number;
+  };
+}
+
 @Injectable()
 export class RagService {
   private transactionsSupported: boolean | null = null;
@@ -91,6 +127,64 @@ export class RagService {
     options: AskExecutionOptions,
   ): Promise<RagAnswer> {
     return this.executeAsk(userId, dto, options);
+  }
+
+  async retrieveForWorkflow(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    query: string;
+    topK: number;
+  }): Promise<WorkflowRagRetrievalResult> {
+    const retrievalOutput =
+      await this.ragRetrievalService.retrieveTopKByQueryWithProvider(input);
+
+    return {
+      query: input.query,
+      topK: input.topK,
+      chunks: retrievalOutput.chunks,
+      citations: retrievalOutput.chunks.map(
+        (chunk): RagCitation => this.chunkToCitationMapper.map(chunk),
+      ),
+      retrievalProvider: retrievalOutput.provider,
+    };
+  }
+
+  async answerWorkflow(
+    input: WorkflowRagAnswerInput,
+  ): Promise<WorkflowRagAnswerResult> {
+    const promptDefinition = this.promptRegistry.getCurrent();
+    const startedAt = Date.now();
+    const answerResult = await this.generateAnswer({
+      question: input.query,
+      preparedAnswer: this.prepareFallbackAnswer(input.chunks),
+      retrievedChunks: input.chunks,
+      historyItems: [],
+      promptDefinition,
+      options: {
+        onToken: input.onToken,
+        signal: input.signal,
+      },
+    });
+
+    return {
+      answer: answerResult.answer,
+      citations: input.chunks.map(
+        (chunk): RagCitation => this.chunkToCitationMapper.map(chunk),
+      ),
+      trace: {
+        knowledgeBaseId: input.knowledgeBaseId,
+        query: input.query,
+        topK: input.topK,
+        retrievedCount: input.chunks.length,
+        contextChunkCount: answerResult.contextStats.contextChunkCount,
+        contextCharCount: answerResult.contextStats.contextCharCount,
+        contextTrimmed: answerResult.contextStats.contextTrimmed,
+        model: this.ragChatModelFactory.getModelLabel(),
+        retrievalProvider: input.retrievalProvider,
+        promptVersion: promptDefinition.versionedId,
+        latencyMs: Date.now() - startedAt,
+      },
+    };
   }
 
   private async executeAsk(

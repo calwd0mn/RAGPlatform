@@ -70,13 +70,14 @@ export class IngestionService {
     }
 
     const lockedDocument = document;
+    const lockedDocumentId = lockedDocument._id.toString();
     // 加载文件
     try {
       const loadedDocuments = await this.documentLoaderFactory.load({
         storagePath: lockedDocument.storagePath,
         originalName: lockedDocument.originalName,
         mimeType: lockedDocument.mimeType, // Document Type
-        documentId: lockedDocument.id,
+        documentId: lockedDocumentId,
       });
 
       if (loadedDocuments.length === 0) {
@@ -86,7 +87,7 @@ export class IngestionService {
       const mappedDocuments = this.langchainDocumentMapper.mapLoadedDocuments({
         loadedDocuments,
         userId,
-        documentId: lockedDocument.id,
+        documentId: lockedDocumentId,
         originalName: lockedDocument.originalName,
         mimeType: lockedDocument.mimeType,
       });
@@ -127,14 +128,15 @@ export class IngestionService {
         ): LangChainDocument =>
           new LangChainDocument({
             pageContent: chunkDocument.pageContent,
+            // 这个builder只进行了page和source类型转换
             metadata: this.chunkMetadataBuilder.build({
               metadata: chunkDocument.metadata,
               originalName: lockedDocument.originalName,
               mimeType: lockedDocument.mimeType,
-              documentId: lockedDocument.id,
+              documentId: lockedDocumentId,
               userId,
             }),
-            id: `${lockedDocument.id}-${chunkIndex}`,
+            id: `${lockedDocumentId}-${chunkIndex}`,
           }),
       );
 
@@ -160,7 +162,7 @@ export class IngestionService {
         .exec();
 
       return {
-        documentId: lockedDocument.id,
+        documentId: lockedDocumentId,
         finalStatus: DocumentStatusEnum.Ready,
         chunkCount,
         message: 'Ingestion completed successfully',
@@ -168,7 +170,7 @@ export class IngestionService {
     } catch (error) {
       const errorMessage = this.extractErrorMessage(error);
       this.logger.error(
-        `Failed to ingest document ${lockedDocument.id}: ${errorMessage}`,
+        `Failed to ingest document ${lockedDocumentId}: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
       );
       await this.chunkModel
@@ -245,8 +247,8 @@ export class IngestionService {
     return new Types.ObjectId(value);
   }
 
-  private extractErrorMessage(error: { message?: string }): string {
-    const message = (error.message ?? '').trim();
+  private extractErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message.trim() : '';
     if (message.length === 0) {
       return 'Unknown ingestion error';
     }

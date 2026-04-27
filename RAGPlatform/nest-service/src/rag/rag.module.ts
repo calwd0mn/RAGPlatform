@@ -44,5 +44,6 @@ import { RagGenerationLockService } from './services/rag-generation-lock.service
     PromptRenderer,
     RagGenerationLockService,
   ],
+  exports: [RagService],
 })
 export class RagModule {}

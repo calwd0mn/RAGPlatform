@@ -11,6 +11,10 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { KnowledgeBasesModule } from './knowledge-bases/knowledge-bases.module';
 import { RagModule } from './rag/rag.module';
 import { ChunksModule } from './chunks/chunks.module';
+import { WorkflowsModule } from './workflows/workflows.module';
+import { configureNodeDns } from './config/node-dns.config';
+
+configureNodeDns();
 
 const shouldConnectMongo =
   process.env.NODE_ENV !== 'test' || Boolean(process.env.MONGODB_URI);
@@ -38,6 +42,7 @@ const databaseImports = shouldConnectMongo
     IngestionModule,
     RagModule,
     ChunksModule,
+    WorkflowsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

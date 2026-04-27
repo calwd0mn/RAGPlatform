@@ -168,7 +168,7 @@ export function useChatStreaming(
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setStreamingAssistantMessage(null);
-      } else if (error instanceof AxiosError<ApiErrorPayload>) {
+      } else if (error instanceof AxiosError) {
         setSubmitErrorMessage(getApiErrorMessage(error));
         setStreamingAssistantMessage(null);
       } else if (error instanceof Error) {

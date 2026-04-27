@@ -11,6 +11,7 @@ import {
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Spin, Typography } from "antd";
 import type { ReactNode } from "react";
+import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
 import type {
   WorkflowNodeData,
   WorkflowNodeExecutionStatus,
@@ -20,11 +21,7 @@ import styles from "./WorkflowNodes.module.css";
 
 export type WorkflowFlowNode = Node<WorkflowNodeData, WorkflowNodeType>;
 
-interface WorkflowNodeProps extends NodeProps<WorkflowFlowNode> {
-  data: WorkflowNodeData & {
-    executionStatus?: WorkflowNodeExecutionStatus;
-  };
-}
+type WorkflowNodeProps = NodeProps<WorkflowFlowNode>;
 
 interface NodeShellProps {
   label: string;
@@ -67,13 +64,20 @@ function NodeShell({ label, icon, tone, status, children }: NodeShellProps) {
   );
 }
 
-export function StartWorkflowNode({ data }: WorkflowNodeProps) {
+function useNodeExecutionStatus(
+  id: string,
+): WorkflowNodeExecutionStatus | undefined {
+  return useWorkflowEditorStore((state) => state.executionStates[id]?.status);
+}
+
+export function StartWorkflowNode({ id, data }: WorkflowNodeProps) {
+  const status = useNodeExecutionStatus(id);
   return (
     <NodeShell
       label={data.label}
       icon={<PlayCircleOutlined />}
       tone="#1677ff"
-      status={data.executionStatus}
+      status={status}
     >
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         工作流入口
@@ -83,7 +87,8 @@ export function StartWorkflowNode({ data }: WorkflowNodeProps) {
   );
 }
 
-export function UserInputWorkflowNode({ data }: WorkflowNodeProps) {
+export function UserInputWorkflowNode({ id, data }: WorkflowNodeProps) {
+  const status = useNodeExecutionStatus(id);
   const inputField =
     data.nodeType === "userInput" ? data.inputField : "question";
   return (
@@ -91,7 +96,7 @@ export function UserInputWorkflowNode({ data }: WorkflowNodeProps) {
       label={data.label}
       icon={<UserOutlined />}
       tone="#16a34a"
-      status={data.executionStatus}
+      status={status}
     >
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         {inputField}
@@ -102,14 +107,15 @@ export function UserInputWorkflowNode({ data }: WorkflowNodeProps) {
   );
 }
 
-export function RagWorkflowNode({ data }: WorkflowNodeProps) {
+export function RagWorkflowNode({ id, data }: WorkflowNodeProps) {
+  const status = useNodeExecutionStatus(id);
   const topK = data.nodeType === "rag" ? data.topK : 5;
   return (
     <NodeShell
       label={data.label}
       icon={<FileSearchOutlined />}
       tone="#d97706"
-      status={data.executionStatus}
+      status={status}
     >
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         Top K: {topK}
@@ -120,13 +126,14 @@ export function RagWorkflowNode({ data }: WorkflowNodeProps) {
   );
 }
 
-export function ConditionWorkflowNode({ data }: WorkflowNodeProps) {
+export function ConditionWorkflowNode({ id, data }: WorkflowNodeProps) {
+  const status = useNodeExecutionStatus(id);
   return (
     <NodeShell
       label={data.label}
       icon={<BranchesOutlined />}
       tone="#dc2626"
-      status={data.executionStatus}
+      status={status}
     >
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         true / false
@@ -148,13 +155,14 @@ export function ConditionWorkflowNode({ data }: WorkflowNodeProps) {
   );
 }
 
-export function OutputWorkflowNode({ data }: WorkflowNodeProps) {
+export function OutputWorkflowNode({ id, data }: WorkflowNodeProps) {
+  const status = useNodeExecutionStatus(id);
   return (
     <NodeShell
       label={data.label}
       icon={<ExportOutlined />}
       tone="#7c3aed"
-      status={data.executionStatus}
+      status={status}
     >
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         最终答案
@@ -163,4 +171,3 @@ export function OutputWorkflowNode({ data }: WorkflowNodeProps) {
     </NodeShell>
   );
 }
-

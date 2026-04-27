@@ -4,15 +4,11 @@ import {
   MiniMap,
   ReactFlow,
   useReactFlow,
-  type Connection,
-  type Edge,
-  type EdgeChange,
-  type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useRef } from "react";
+import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
 import type { WorkflowNodeType } from "../../types/workflow";
-import type { WorkflowFlowNode } from "./WorkflowNodes";
 import {
   createWorkflowNodeData,
   WORKFLOW_NODE_CATALOG,
@@ -20,18 +16,19 @@ import {
 } from "./workflow-node-catalog";
 import styles from "./WorkflowEditorPanels.module.css";
 
-interface WorkflowCanvasSurfaceProps {
-  flowNodes: WorkflowFlowNode[];
-  flowEdges: Edge[];
-  onNodesChange: (changes: NodeChange<WorkflowFlowNode>[]) => void;
-  onEdgesChange: (changes: EdgeChange<Edge>[]) => void;
-  onConnect: (connection: Connection) => void;
-  onSelectNode: (nodeId: string) => void;
-  onAddNode: (node: WorkflowFlowNode) => void;
-}
-
-export function WorkflowCanvasSurface(props: WorkflowCanvasSurfaceProps) {
+export function WorkflowCanvasSurface() {
   const { screenToFlowPosition } = useReactFlow();
+  const flowNodes = useWorkflowEditorStore((state) => state.flowNodes);
+  const flowEdges = useWorkflowEditorStore((state) => state.flowEdges);
+  const applyWorkflowNodeChanges = useWorkflowEditorStore(
+    (state) => state.applyWorkflowNodeChanges,
+  );
+  const applyWorkflowEdgeChanges = useWorkflowEditorStore(
+    (state) => state.applyWorkflowEdgeChanges,
+  );
+  const connectNodes = useWorkflowEditorStore((state) => state.connectNodes);
+  const selectNode = useWorkflowEditorStore((state) => state.selectNode);
+  const addNode = useWorkflowEditorStore((state) => state.addNode);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
@@ -52,14 +49,14 @@ export function WorkflowCanvasSurface(props: WorkflowCanvasSurfaceProps) {
         x: event.clientX,
         y: event.clientY,
       });
-      props.onAddNode({
+      addNode({
         id: `${type}_${Date.now()}`,
         type,
         position,
         data: createWorkflowNodeData(type),
       });
     },
-    [props, screenToFlowPosition],
+    [addNode, screenToFlowPosition],
   );
 
   return (
@@ -70,13 +67,13 @@ export function WorkflowCanvasSurface(props: WorkflowCanvasSurfaceProps) {
       onDrop={handleDrop}
     >
       <ReactFlow
-        nodes={props.flowNodes}
-        edges={props.flowEdges}
+        nodes={flowNodes}
+        edges={flowEdges}
         nodeTypes={workflowReactNodeTypes}
-        onNodesChange={props.onNodesChange}
-        onEdgesChange={props.onEdgesChange}
-        onConnect={props.onConnect}
-        onNodeClick={(_event, node) => props.onSelectNode(node.id)}
+        onNodesChange={applyWorkflowNodeChanges}
+        onEdgesChange={applyWorkflowEdgeChanges}
+        onConnect={connectNodes}
+        onNodeClick={(_event, node) => selectNode(node.id)}
         fitView
       >
         <Background gap={18} color="#e5e7eb" />
@@ -86,4 +83,3 @@ export function WorkflowCanvasSurface(props: WorkflowCanvasSurfaceProps) {
     </div>
   );
 }
-

@@ -3,22 +3,13 @@ import { Button, Collapse, Empty, Input, Space, Tag, Typography, message } from 
 import type { CollapseProps } from "antd";
 import { useRef, useState } from "react";
 import { runWorkflowStream } from "../../services/workflows";
+import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
 import type {
   WorkflowNodeExecution,
-  WorkflowRunFinal,
   WorkflowRunInputs,
-  WorkflowStreamEvent,
 } from "../../types/workflow";
 import { PageSectionCard } from "../common/PageSectionCard";
 import styles from "./WorkflowEditorPanels.module.css";
-
-interface WorkflowRunPanelProps {
-  workflowId: string;
-  executions: Record<string, WorkflowNodeExecution>;
-  finalResult: WorkflowRunFinal | null;
-  onRunEvent: (event: WorkflowStreamEvent) => void;
-  onClear: () => void;
-}
 
 function parseRunInputs(inputText: string): WorkflowRunInputs {
   const parsed = JSON.parse(inputText) as unknown;
@@ -71,13 +62,19 @@ function getStatusTag(status: WorkflowNodeExecution["status"]) {
   return <Tag>跳过</Tag>;
 }
 
-export function WorkflowRunPanel({
-  workflowId,
-  executions,
-  finalResult,
-  onRunEvent,
-  onClear,
-}: WorkflowRunPanelProps) {
+export function WorkflowRunPanel() {
+  const workflowId = useWorkflowEditorStore((state) => state.workflowId);
+  const executionStates = useWorkflowEditorStore(
+    (state) => state.executionStates,
+  );
+  const finalResult = useWorkflowEditorStore((state) => state.finalResult);
+  const setNodeExecution = useWorkflowEditorStore(
+    (state) => state.setNodeExecution,
+  );
+  const setFinalResult = useWorkflowEditorStore(
+    (state) => state.setFinalResult,
+  );
+  const clearRunState = useWorkflowEditorStore((state) => state.clearRunState);
   const [inputsText, setInputsText] = useState(
     '{\n  "question": "请介绍一下当前知识库的核心内容"\n}',
   );
@@ -93,7 +90,7 @@ export function WorkflowRunPanel({
       return;
     }
 
-    onClear();
+    clearRunState();
     const abortController = new AbortController();
     abortControllerRef.current?.abort();
     abortControllerRef.current = abortController;
@@ -101,7 +98,17 @@ export function WorkflowRunPanel({
     try {
       await runWorkflowStream(workflowId, inputs, {
         signal: abortController.signal,
-        onEvent: onRunEvent,
+        onEvent: (event) => {
+          if (event.event === "node_status") {
+            setNodeExecution(event.data);
+            return;
+          }
+          if (event.event === "final") {
+            setFinalResult(event.data);
+            return;
+          }
+          message.error(event.data.message);
+        },
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -119,7 +126,7 @@ export function WorkflowRunPanel({
     setRunning(false);
   };
 
-  const executionItems = Object.values(executions);
+  const executionItems = Object.values(executionStates);
   const successCount = executionItems.filter(
     (item) => item.status === "success",
   ).length;
@@ -174,7 +181,7 @@ export function WorkflowRunPanel({
           <Button onClick={handleStop} disabled={!running}>
             停止
           </Button>
-          <Button onClick={onClear} disabled={running}>
+          <Button onClick={clearRunState} disabled={running}>
             清除
           </Button>
         </Space>
@@ -208,4 +215,3 @@ export function WorkflowRunPanel({
     </PageSectionCard>
   );
 }
-

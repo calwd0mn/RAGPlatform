@@ -1,27 +1,15 @@
 import { SaveOutlined } from "@ant-design/icons";
-import {
-  ReactFlowProvider,
-  addEdge,
-  applyEdgeChanges,
-  applyNodeChanges,
-  type Connection,
-  type Edge,
-  type EdgeChange,
-  type NodeChange,
-} from "@xyflow/react";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Spin, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { PageSectionCard } from "../../components/common/PageSectionCard";
 import { WorkflowCanvasSurface } from "../../components/workflow/WorkflowCanvasSurface";
 import { WorkflowConfigPanel } from "../../components/workflow/WorkflowConfigPanel";
 import { WorkflowNodePanel } from "../../components/workflow/WorkflowNodePanel";
 import { WorkflowRunPanel } from "../../components/workflow/WorkflowRunPanel";
-import type { WorkflowFlowNode } from "../../components/workflow/WorkflowNodes";
 import styles from "../../components/workflow/WorkflowEditorPanels.module.css";
 import {
-  toFlowEdges,
-  toFlowNodes,
   toWorkflowEdges,
   toWorkflowNodes,
 } from "../../components/workflow/workflow-graph-adapters";
@@ -31,13 +19,8 @@ import {
   updateWorkflow,
 } from "../../services/workflows";
 import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
-import type {
-  WorkflowNodeData,
-  WorkflowNodeExecution,
-  WorkflowRecord,
-  WorkflowRunFinal,
-  WorkflowStreamEvent,
-} from "../../types/workflow";
+import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
+import type { WorkflowRecord } from "../../types/workflow";
 import pageStyles from "./WorkflowPage.module.css";
 
 function WorkflowPageContent() {
@@ -45,13 +28,8 @@ function WorkflowPageContent() {
   const currentKnowledgeBaseId = useKnowledgeBaseStore(
     (state) => state.currentKnowledgeBaseId,
   );
-  const [flowNodes, setFlowNodes] = useState<WorkflowFlowNode[]>([]);
-  const [flowEdges, setFlowEdges] = useState<Edge[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState("");
-  const [executions, setExecutions] = useState<
-    Record<string, WorkflowNodeExecution>
-  >({});
-  const [finalResult, setFinalResult] = useState<WorkflowRunFinal | null>(null);
+  const setWorkflow = useWorkflowEditorStore((state) => state.setWorkflow);
+  const resetWorkflow = useWorkflowEditorStore((state) => state.resetWorkflow);
 
   const workflowQuery = useQuery({
     queryKey: queryKeys.workflows.current(currentKnowledgeBaseId),
@@ -60,24 +38,29 @@ function WorkflowPageContent() {
   });
 
   useEffect(() => {
-    const workflow = workflowQuery.data;
-    if (!workflow) {
-      setFlowNodes([]);
-      setFlowEdges([]);
+    if (currentKnowledgeBaseId.length === 0 || workflowQuery.isError) {
+      resetWorkflow();
       return;
     }
-    setFlowNodes(toFlowNodes(workflow.nodes));
-    setFlowEdges(toFlowEdges(workflow.edges));
-    setExecutions({});
-    setFinalResult(null);
-  }, [workflowQuery.data]);
+    if (workflowQuery.data) {
+      setWorkflow(workflowQuery.data);
+    }
+  }, [
+    currentKnowledgeBaseId,
+    resetWorkflow,
+    setWorkflow,
+    workflowQuery.data,
+    workflowQuery.isError,
+  ]);
 
   const saveMutation = useMutation({
-    mutationFn: (workflow: WorkflowRecord) =>
-      updateWorkflow(workflow.id, {
+    mutationFn: (workflow: WorkflowRecord) => {
+      const { flowNodes, flowEdges } = useWorkflowEditorStore.getState();
+      return updateWorkflow(workflow.id, {
         nodes: toWorkflowNodes(flowNodes),
         edges: toWorkflowEdges(flowEdges),
-      }),
+      });
+    },
     onSuccess: async (workflow) => {
       await queryClient.setQueryData(
         queryKeys.workflows.current(workflow.knowledgeBaseId),
@@ -89,97 +72,6 @@ function WorkflowPageContent() {
       message.error("工作流保存失败。");
     },
   });
-
-  const selectedNode = useMemo(
-    () => flowNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [flowNodes, selectedNodeId],
-  );
-
-  const handleNodesChange = useCallback(
-    (changes: NodeChange<WorkflowFlowNode>[]) => {
-      setFlowNodes((current) =>
-        applyNodeChanges(changes, current) as WorkflowFlowNode[],
-      );
-    },
-    [],
-  );
-
-  const handleEdgesChange = useCallback((changes: EdgeChange<Edge>[]) => {
-    setFlowEdges((current) => applyEdgeChanges(changes, current));
-  }, []);
-
-  const handleConnect = useCallback((connection: Connection) => {
-    setFlowEdges((current) =>
-      addEdge(
-        {
-          ...connection,
-          id: `${connection.source}-${connection.target}-${Date.now()}`,
-        },
-        current,
-      ),
-    );
-  }, []);
-
-  const handleUpdateNodeData = useCallback(
-    (nodeId: string, data: WorkflowNodeData) => {
-      setFlowNodes((current) =>
-        current.map((node) =>
-          node.id === nodeId
-            ? {
-                ...node,
-                data: {
-                  ...data,
-                  executionStatus: node.data.executionStatus,
-                },
-              }
-            : node,
-        ),
-      );
-    },
-    [],
-  );
-
-  const clearRunState = useCallback(() => {
-    setExecutions({});
-    setFinalResult(null);
-    setFlowNodes((current) =>
-      current.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          executionStatus: undefined,
-        },
-      })),
-    );
-  }, []);
-
-  const handleRunEvent = useCallback((event: WorkflowStreamEvent) => {
-    if (event.event === "node_status") {
-      setExecutions((current) => ({
-        ...current,
-        [event.data.nodeId]: event.data,
-      }));
-      setFlowNodes((current) =>
-        current.map((node) =>
-          node.id === event.data.nodeId
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  executionStatus: event.data.status,
-                },
-              }
-            : node,
-        ),
-      );
-      return;
-    }
-    if (event.event === "final") {
-      setFinalResult(event.data);
-      return;
-    }
-    message.error(event.data.message);
-  }, []);
 
   if (currentKnowledgeBaseId.length === 0) {
     return (
@@ -237,28 +129,11 @@ function WorkflowPageContent() {
           <WorkflowNodePanel />
         </div>
         <PageSectionCard title="画布" className={styles.canvasCard}>
-          <WorkflowCanvasSurface
-            flowNodes={flowNodes}
-            flowEdges={flowEdges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onConnect={handleConnect}
-            onSelectNode={setSelectedNodeId}
-            onAddNode={(node) => setFlowNodes((current) => [...current, node])}
-          />
+          <WorkflowCanvasSurface />
         </PageSectionCard>
         <div className={pageStyles.rightRail}>
-          <WorkflowConfigPanel
-            selectedNode={selectedNode}
-            onUpdateNodeData={handleUpdateNodeData}
-          />
-          <WorkflowRunPanel
-            workflowId={workflowQuery.data.id}
-            executions={executions}
-            finalResult={finalResult}
-            onRunEvent={handleRunEvent}
-            onClear={clearRunState}
-          />
+          <WorkflowConfigPanel />
+          <WorkflowRunPanel />
         </div>
       </div>
     </div>

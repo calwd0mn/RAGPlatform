@@ -17,15 +17,14 @@ export function toFlowNodes(nodes: WorkflowNode[]): WorkflowFlowNode[] {
 }
 
 export function toWorkflowNodes(nodes: WorkflowFlowNode[]): WorkflowNode[] {
-  return nodes.map((node): WorkflowNode => {
-    const { executionStatus: _executionStatus, ...data } = node.data;
-    return {
+  return nodes.map(
+    (node): WorkflowNode => ({
       id: node.id,
-      type: node.type ?? data.nodeType,
+      type: node.type ?? node.data.nodeType,
       position: node.position,
-      data,
-    };
-  });
+      data: node.data,
+    }),
+  );
 }
 
 export function toFlowEdges(edges: WorkflowEdge[]): Edge[] {
@@ -54,4 +53,3 @@ export function toWorkflowEdges(edges: Edge[]): WorkflowEdge[] {
     };
   });
 }
-

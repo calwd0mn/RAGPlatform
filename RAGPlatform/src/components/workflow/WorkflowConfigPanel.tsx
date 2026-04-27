@@ -3,14 +3,9 @@ import type {
   WorkflowConditionItem,
   WorkflowNodeData,
 } from "../../types/workflow";
+import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
 import { PageSectionCard } from "../common/PageSectionCard";
-import type { WorkflowFlowNode } from "./WorkflowNodes";
 import styles from "./WorkflowEditorPanels.module.css";
-
-interface WorkflowConfigPanelProps {
-  selectedNode: WorkflowFlowNode | null;
-  onUpdateNodeData: (nodeId: string, data: WorkflowNodeData) => void;
-}
 
 function parseConditions(value: string): WorkflowConditionItem[] {
   const parsed = JSON.parse(value) as unknown;
@@ -43,10 +38,15 @@ function parseConditions(value: string): WorkflowConditionItem[] {
   });
 }
 
-export function WorkflowConfigPanel({
-  selectedNode,
-  onUpdateNodeData,
-}: WorkflowConfigPanelProps) {
+export function WorkflowConfigPanel() {
+  const selectedNode = useWorkflowEditorStore(
+    (state) =>
+      state.flowNodes.find((node) => node.id === state.selectedNodeId) ?? null,
+  );
+  const updateNodeData = useWorkflowEditorStore(
+    (state) => state.updateNodeData,
+  );
+
   if (!selectedNode) {
     return (
       <PageSectionCard title="节点配置" className={styles.sideCard}>
@@ -56,7 +56,7 @@ export function WorkflowConfigPanel({
   }
 
   const updateLabel = (label: string): void => {
-    onUpdateNodeData(selectedNode.id, {
+    updateNodeData(selectedNode.id, {
       ...selectedNode.data,
       label,
     } as WorkflowNodeData);
@@ -81,7 +81,7 @@ export function WorkflowConfigPanel({
           <Input
             value={selectedNode.data.inputField}
             onChange={(event) =>
-              onUpdateNodeData(selectedNode.id, {
+              updateNodeData(selectedNode.id, {
                 ...selectedNode.data,
                 inputField: event.target.value,
               })
@@ -98,7 +98,7 @@ export function WorkflowConfigPanel({
               rows={4}
               value={selectedNode.data.query}
               onChange={(event) =>
-                onUpdateNodeData(selectedNode.id, {
+                updateNodeData(selectedNode.id, {
                   ...selectedNode.data,
                   query: event.target.value,
                 })
@@ -111,7 +111,7 @@ export function WorkflowConfigPanel({
               max={20}
               value={selectedNode.data.topK}
               onChange={(value) =>
-                onUpdateNodeData(selectedNode.id, {
+                updateNodeData(selectedNode.id, {
                   ...selectedNode.data,
                   topK: value ?? 5,
                 })
@@ -129,7 +129,7 @@ export function WorkflowConfigPanel({
             value={JSON.stringify(selectedNode.data.conditions, null, 2)}
             onChange={(event) => {
               try {
-                onUpdateNodeData(selectedNode.id, {
+                updateNodeData(selectedNode.id, {
                   ...selectedNode.data,
                   conditions: parseConditions(event.target.value),
                 });
@@ -147,7 +147,7 @@ export function WorkflowConfigPanel({
           rows={5}
           value={selectedNode.data.outputValue}
           onChange={(event) =>
-            onUpdateNodeData(selectedNode.id, {
+            updateNodeData(selectedNode.id, {
               ...selectedNode.data,
               outputValue: event.target.value,
             })
@@ -166,4 +166,3 @@ export function WorkflowConfigPanel({
     </PageSectionCard>
   );
 }
-

@@ -4,11 +4,13 @@ import {
   MiniMap,
   ReactFlow,
   useReactFlow,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useWorkflowEditorStore } from "../../stores/workflow-editor.store";
 import type { WorkflowNodeType } from "../../types/workflow";
+import type { WorkflowFlowNode } from "./WorkflowNodes";
 import {
   createWorkflowNodeData,
   WORKFLOW_NODE_CATALOG,
@@ -17,19 +19,34 @@ import {
 import styles from "./WorkflowEditorPanels.module.css";
 
 export function WorkflowCanvasSurface() {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setNodes, getNodes } =
+    useReactFlow<WorkflowFlowNode>();
   const flowNodes = useWorkflowEditorStore((state) => state.flowNodes);
   const flowEdges = useWorkflowEditorStore((state) => state.flowEdges);
-  const applyWorkflowNodeChanges = useWorkflowEditorStore(
-    (state) => state.applyWorkflowNodeChanges,
-  );
   const applyWorkflowEdgeChanges = useWorkflowEditorStore(
     (state) => state.applyWorkflowEdgeChanges,
   );
   const connectNodes = useWorkflowEditorStore((state) => state.connectNodes);
   const selectNode = useWorkflowEditorStore((state) => state.selectNode);
   const addNode = useWorkflowEditorStore((state) => state.addNode);
+  const setFlowNodes = useWorkflowEditorStore((state) => state.setFlowNodes);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const reactFlowReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (!reactFlowReadyRef.current) {
+      return;
+    }
+    setNodes(flowNodes);
+  }, [flowNodes, setNodes]);
+
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<WorkflowFlowNode>) => {
+      reactFlowReadyRef.current = true;
+      instance.setNodes(flowNodes);
+    },
+    [flowNodes],
+  );
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -67,13 +84,15 @@ export function WorkflowCanvasSurface() {
       onDrop={handleDrop}
     >
       <ReactFlow
-        nodes={flowNodes}
+        defaultNodes={flowNodes}
         edges={flowEdges}
         nodeTypes={workflowReactNodeTypes}
-        onNodesChange={applyWorkflowNodeChanges}
+        onInit={handleInit}
         onEdgesChange={applyWorkflowEdgeChanges}
         onConnect={connectNodes}
         onNodeClick={(_event, node) => selectNode(node.id)}
+        onNodeDragStop={() => setFlowNodes(getNodes())}
+        onNodesDelete={() => setFlowNodes(getNodes())}
         fitView
       >
         <Background gap={18} color="#e5e7eb" />

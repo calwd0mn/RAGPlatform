@@ -39,15 +39,18 @@ function parseConditions(value: string): WorkflowConditionItem[] {
 }
 
 export function WorkflowConfigPanel() {
-  const selectedNode = useWorkflowEditorStore(
+  const selectedNodeId = useWorkflowEditorStore(
+    (state) => state.selectedNodeId,
+  );
+  const selectedNodeData = useWorkflowEditorStore(
     (state) =>
-      state.flowNodes.find((node) => node.id === state.selectedNodeId) ?? null,
+      state.flowNodes.find((node) => node.id === selectedNodeId)?.data ?? null,
   );
   const updateNodeData = useWorkflowEditorStore(
     (state) => state.updateNodeData,
   );
 
-  if (!selectedNode) {
+  if (!selectedNodeId || !selectedNodeData) {
     return (
       <PageSectionCard title="节点配置" className={styles.sideCard}>
         <Empty description="选择节点以编辑配置" />
@@ -56,8 +59,8 @@ export function WorkflowConfigPanel() {
   }
 
   const updateLabel = (label: string): void => {
-    updateNodeData(selectedNode.id, {
-      ...selectedNode.data,
+    updateNodeData(selectedNodeId, {
+      ...selectedNodeData,
       label,
     } as WorkflowNodeData);
   };
@@ -65,24 +68,24 @@ export function WorkflowConfigPanel() {
   const commonLabel = (
     <Form.Item label="节点名称">
       <Input
-        value={selectedNode.data.label}
+        value={selectedNodeData.label}
         onChange={(event) => updateLabel(event.target.value)}
       />
     </Form.Item>
   );
 
   const renderFields = () => {
-    if (selectedNode.data.nodeType === "start") {
+    if (selectedNodeData.nodeType === "start") {
       return <Typography.Text type="secondary">工作流入口节点。</Typography.Text>;
     }
-    if (selectedNode.data.nodeType === "userInput") {
+    if (selectedNodeData.nodeType === "userInput") {
       return (
         <Form.Item label="输入字段">
           <Input
-            value={selectedNode.data.inputField}
+            value={selectedNodeData.inputField}
             onChange={(event) =>
-              updateNodeData(selectedNode.id, {
-                ...selectedNode.data,
+              updateNodeData(selectedNodeId, {
+                ...selectedNodeData,
                 inputField: event.target.value,
               })
             }
@@ -90,16 +93,16 @@ export function WorkflowConfigPanel() {
         </Form.Item>
       );
     }
-    if (selectedNode.data.nodeType === "rag") {
+    if (selectedNodeData.nodeType === "rag") {
       return (
         <>
           <Form.Item label="检索查询">
             <Input.TextArea
               rows={4}
-              value={selectedNode.data.query}
+              value={selectedNodeData.query}
               onChange={(event) =>
-                updateNodeData(selectedNode.id, {
-                  ...selectedNode.data,
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
                   query: event.target.value,
                 })
               }
@@ -109,11 +112,11 @@ export function WorkflowConfigPanel() {
             <InputNumber
               min={1}
               max={20}
-              value={selectedNode.data.topK}
+              value={selectedNodeData.topK}
               onChange={(value) =>
-                updateNodeData(selectedNode.id, {
-                  ...selectedNode.data,
-                  topK: value ?? 5,
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  topK: Number(value ?? 5),
                 })
               }
             />
@@ -121,16 +124,16 @@ export function WorkflowConfigPanel() {
         </>
       );
     }
-    if (selectedNode.data.nodeType === "condition") {
+    if (selectedNodeData.nodeType === "condition") {
       return (
         <Form.Item label="条件 JSON">
           <Input.TextArea
             rows={7}
-            value={JSON.stringify(selectedNode.data.conditions, null, 2)}
+            value={JSON.stringify(selectedNodeData.conditions, null, 2)}
             onChange={(event) => {
               try {
-                updateNodeData(selectedNode.id, {
-                  ...selectedNode.data,
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
                   conditions: parseConditions(event.target.value),
                 });
               } catch {
@@ -145,10 +148,10 @@ export function WorkflowConfigPanel() {
       <Form.Item label="输出问题模板">
         <Input.TextArea
           rows={5}
-          value={selectedNode.data.outputValue}
+          value={selectedNodeData.outputValue}
           onChange={(event) =>
-            updateNodeData(selectedNode.id, {
-              ...selectedNode.data,
+            updateNodeData(selectedNodeId, {
+              ...selectedNodeData,
               outputValue: event.target.value,
             })
           }

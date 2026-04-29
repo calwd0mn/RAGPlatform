@@ -1,4 +1,15 @@
-import { IsInt, IsMongoId, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class AskRagDto {
   @IsMongoId()
@@ -15,4 +26,8 @@ export class AskRagDto {
   @Min(1)
   @Max(20)
   topK?: number;
+
+  @IsOptional()
+  @IsUUID()
+  requestId?: string;
 }

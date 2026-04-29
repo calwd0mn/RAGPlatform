@@ -1,5 +1,11 @@
 import type { RagCitation, RagTrace } from "./rag";
 
+export type MessageGenerationStatus =
+  | "streaming"
+  | "completed"
+  | "interrupted"
+  | "failed";
+
 export interface ConversationItem {
   id: string;
   knowledgeBaseId: string;
@@ -14,6 +20,8 @@ export interface ChatMessage {
   createdAt: string;
   citations?: RagCitation[];
   trace?: RagTrace;
+  requestId?: string;
+  status?: MessageGenerationStatus;
 }
 
 export type CitationItem = RagCitation;

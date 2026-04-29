@@ -17,6 +17,7 @@ import { useConversationList } from "../../hooks/chat/useConversationList";
 import { useMessageList } from "../../hooks/chat/useMessageList";
 import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
+import type { ChatMessage } from "../../types/chat";
 import styles from "./ChatWorkbenchPage.module.css";
 
 function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
@@ -25,6 +26,27 @@ function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
   }
   const { message } = error.response.data;
   return Array.isArray(message) ? message.join("；") : message;
+}
+
+function mergeStreamingMessage(
+  persistedMessages: ChatMessage[],
+  streamingAssistantMessage: ChatMessage | null,
+): ChatMessage[] {
+  if (!streamingAssistantMessage) {
+    return persistedMessages;
+  }
+
+  const isPersisted = persistedMessages.some(
+    (message) =>
+      message.requestId &&
+      message.requestId === streamingAssistantMessage.requestId &&
+      message.role === "assistant",
+  );
+  if (isPersisted) {
+    return persistedMessages;
+  }
+
+  return [...persistedMessages, streamingAssistantMessage];
 }
 
 export function ChatWorkbenchPage() {
@@ -111,10 +133,7 @@ export function ChatWorkbenchPage() {
     navigate,
   });
   const messages = useMemo(
-    () =>
-      streamingAssistantMessage
-        ? [...persistedMessages, streamingAssistantMessage]
-        : persistedMessages,
+    () => mergeStreamingMessage(persistedMessages, streamingAssistantMessage),
     [persistedMessages, streamingAssistantMessage],
   );
   const {

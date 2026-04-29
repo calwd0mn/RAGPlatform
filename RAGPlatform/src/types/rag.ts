@@ -43,6 +43,7 @@ export interface RagAskRequest {
   conversationId: string;
   query: string;
   topK?: number;
+  requestId?: string;
 }
 
 export interface RagAskResponse {
@@ -52,4 +53,6 @@ export interface RagAskResponse {
   conversationId: string;
   userMessageId: string;
   assistantMessageId: string;
+  requestId?: string;
+  status?: "streaming" | "completed" | "interrupted" | "failed";
 }

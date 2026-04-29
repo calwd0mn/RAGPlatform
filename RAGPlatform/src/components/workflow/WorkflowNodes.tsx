@@ -31,6 +31,8 @@ interface NodeShellProps {
   children: ReactNode;
 }
 
+
+// 节点外壳
 function NodeShell({ label, icon, tone, status, children }: NodeShellProps) {
   const statusIcon = (() => {
     if (status === "running") {
@@ -64,12 +66,14 @@ function NodeShell({ label, icon, tone, status, children }: NodeShellProps) {
   );
 }
 
+// get Node Execution Status from zustand baseed on nodeId
 function useNodeExecutionStatus(
   id: string,
 ): WorkflowNodeExecutionStatus | undefined {
   return useWorkflowEditorStore((state) => state.executionStates[id]?.status);
 }
 
+// 各种节点
 export function StartWorkflowNode({ id, data }: WorkflowNodeProps) {
   const status = useNodeExecutionStatus(id);
   return (
@@ -86,6 +90,7 @@ export function StartWorkflowNode({ id, data }: WorkflowNodeProps) {
     </NodeShell>
   );
 }
+
 
 export function UserInputWorkflowNode({ id, data }: WorkflowNodeProps) {
   const status = useNodeExecutionStatus(id);

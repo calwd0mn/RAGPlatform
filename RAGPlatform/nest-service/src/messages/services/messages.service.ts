@@ -93,6 +93,8 @@ export class MessagesService {
       content: message.content,
       citations: message.citations,
       trace: message.trace,
+      requestId: message.requestId,
+      status: message.status ?? 'completed',
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
     };

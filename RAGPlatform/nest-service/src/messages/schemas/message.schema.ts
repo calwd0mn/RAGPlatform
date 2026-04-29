@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { MessageCitation } from '../interfaces/message-citation.interface';
+import {
+  MESSAGE_GENERATION_STATUSES,
+  MessageGenerationStatus,
+} from '../interfaces/message-generation-status.type';
 import { MessageRole, MESSAGE_ROLES } from '../interfaces/message-role.type';
 import { MessageTrace } from '../interfaces/message-trace.interface';
 
@@ -86,6 +90,16 @@ export class Message {
   @Prop({ type: MessageTraceSchemaClass, required: false })
   trace?: MessageTrace;
 
+  @Prop({ required: false, trim: true, maxlength: 80, index: true })
+  requestId?: string;
+
+  @Prop({
+    required: true,
+    enum: MESSAGE_GENERATION_STATUSES,
+    default: 'completed',
+  })
+  status!: MessageGenerationStatus;
+
   createdAt!: Date;
   updatedAt!: Date;
 }
@@ -94,3 +108,10 @@ export const MessageSchema = SchemaFactory.createForClass(Message);
 
 MessageSchema.index({ conversationId: 1, createdAt: 1 });
 MessageSchema.index({ userId: 1, conversationId: 1 });
+MessageSchema.index(
+  { userId: 1, requestId: 1, role: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { requestId: { $type: 'string' } },
+  },
+);

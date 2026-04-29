@@ -46,6 +46,26 @@ function getGenericErrorMessage(error: Error): string {
   return message;
 }
 
+function createRequestId(): string {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return [
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10, 16).join(""),
+  ].join("-");
+}
+
 export function useChatStreaming(
   options: UseChatStreamingOptions,
 ): UseChatStreamingResult {
@@ -104,7 +124,9 @@ export function useChatStreaming(
     }
 
     if (activeConversationId && !activeConversation) {
-      setSubmitErrorMessage("当前会话不属于已选知识库，已为你切换回当前知识库。");
+      setSubmitErrorMessage(
+        "当前会话不属于已选知识库，已为你切换回当前知识库。",
+      );
       navigate("/app/chat", { replace: true });
       return;
     }
@@ -121,6 +143,7 @@ export function useChatStreaming(
       }
 
       const tempAssistantMessageId = `stream-${Date.now()}`;
+      const requestId = createRequestId();
       const streamController = new AbortController();
       streamingAbortControllerRef.current?.abort();
       streamingAbortControllerRef.current = streamController;
@@ -134,6 +157,8 @@ export function useChatStreaming(
         }),
         citations: [],
         trace: undefined,
+        requestId,
+        status: "streaming",
       });
       hasStartedStreaming = true;
 
@@ -141,6 +166,7 @@ export function useChatStreaming(
         {
           conversationId: targetConversationId,
           query,
+          requestId,
         },
         {
           signal: streamController.signal,
@@ -167,7 +193,20 @@ export function useChatStreaming(
       hasStartedStreaming = false;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        setStreamingAssistantMessage(null);
+        setStreamingAssistantMessage((previous) => {
+          if (!previous) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            content:
+              previous.content === "正在生成..."
+                ? "已停止生成。"
+                : previous.content,
+            status: "interrupted",
+          };
+        });
       } else if (error instanceof AxiosError) {
         setSubmitErrorMessage(getApiErrorMessage(error));
         setStreamingAssistantMessage(null);

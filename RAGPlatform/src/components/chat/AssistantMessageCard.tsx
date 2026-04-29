@@ -20,7 +20,10 @@ interface AssistantMessageCardProps {
   ) => void;
 }
 
-function renderDocumentName(citation: RagCitation, citationIndex: number): string {
+function renderDocumentName(
+  citation: RagCitation,
+  citationIndex: number,
+): string {
   const name = citation.documentName?.trim();
   if (name) {
     return name;
@@ -34,6 +37,19 @@ function renderExcerpt(citation: RagCitation): string {
     return excerpt;
   }
   return "该证据未返回可展示摘录。";
+}
+
+function renderStatusTag(message: ChatMessage) {
+  if (message.status === "interrupted") {
+    return <Tag color="warning">已停止</Tag>;
+  }
+  if (message.status === "failed") {
+    return <Tag color="error">生成失败</Tag>;
+  }
+  if (message.status === "streaming") {
+    return <Tag color="processing">生成中</Tag>;
+  }
+  return <Tag color="success">已完成</Tag>;
 }
 
 export function AssistantMessageCard({
@@ -62,7 +78,12 @@ export function AssistantMessageCard({
               {message.createdAt}
             </Typography.Text>
           </Space>
-          <Tag color={selected ? "blue" : "default"}>{selected ? "当前焦点" : "历史回答"}</Tag>
+          <Space size={8}>
+            {renderStatusTag(message)}
+            <Tag color={selected ? "blue" : "default"}>
+              {selected ? "当前焦点" : "历史回答"}
+            </Tag>
+          </Space>
         </header>
 
         <section className={styles.bodySection}>
@@ -111,7 +132,9 @@ export function AssistantMessageCard({
             ) : (
               <Tag>Retrieved -</Tag>
             )}
-            {typeof trace?.latencyMs === "number" ? <Tag>Latency {trace.latencyMs} ms</Tag> : null}
+            {typeof trace?.latencyMs === "number" ? (
+              <Tag>Latency {trace.latencyMs} ms</Tag>
+            ) : null}
             {trace?.model ? <Tag>{trace.model}</Tag> : null}
           </Space>
         </section>
@@ -130,11 +153,21 @@ export function AssistantMessageCard({
               }
             />
           ) : (
-            <Space direction="vertical" size={8} className={styles.evidenceList}>
+            <Space
+              direction="vertical"
+              size={8}
+              className={styles.evidenceList}
+            >
               {citationGroups.map((group) => (
-                <section key={`${message.id}-${group.key}`} className={styles.citationGroup}>
+                <section
+                  key={`${message.id}-${group.key}`}
+                  className={styles.citationGroup}
+                >
                   <div className={styles.citationGroupHeader}>
-                    <Typography.Text strong className={styles.citationGroupTitle}>
+                    <Typography.Text
+                      strong
+                      className={styles.citationGroupTitle}
+                    >
                       {group.documentName}
                     </Typography.Text>
                     <Tag color="blue">
@@ -142,7 +175,11 @@ export function AssistantMessageCard({
                     </Tag>
                   </div>
 
-                  <Space direction="vertical" size={8} className={styles.evidenceList}>
+                  <Space
+                    direction="vertical"
+                    size={8}
+                    className={styles.evidenceList}
+                  >
                     {group.items.map((item) => {
                       const citation = item.citation;
                       const citationIndex = item.citationIndex;
@@ -155,7 +192,9 @@ export function AssistantMessageCard({
                           key={`${message.id}-${group.key}-${citationIndex}`}
                           type="button"
                           className={`${styles.citationSummary} ${
-                            isCitationSelected ? styles.citationSummarySelected : ""
+                            isCitationSelected
+                              ? styles.citationSummarySelected
+                              : ""
                           }`}
                           aria-pressed={isCitationSelected}
                           onClick={() =>
@@ -163,7 +202,10 @@ export function AssistantMessageCard({
                           }
                         >
                           <div className={styles.citationTitleRow}>
-                            <Typography.Text strong className={styles.citationTitle}>
+                            <Typography.Text
+                              strong
+                              className={styles.citationTitle}
+                            >
                               [{citationIndex + 1}]{" "}
                               {renderDocumentName(citation, citationIndex)}
                             </Typography.Text>
@@ -171,9 +213,13 @@ export function AssistantMessageCard({
                               {item.mergedCount > 1 ? (
                                 <Tag color="gold">聚合 {item.mergedCount}</Tag>
                               ) : null}
-                              {typeof citation.page === "number" ? <Tag>页 {citation.page}</Tag> : null}
+                              {typeof citation.page === "number" ? (
+                                <Tag>页 {citation.page}</Tag>
+                              ) : null}
                               {typeof citation.score === "number" ? (
-                                <Tag color="cyan">匹配 {Math.round(citation.score * 100)}%</Tag>
+                                <Tag color="cyan">
+                                  匹配 {Math.round(citation.score * 100)}%
+                                </Tag>
                               ) : null}
                             </Space>
                           </div>

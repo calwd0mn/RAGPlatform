@@ -1,10 +1,15 @@
-import { memo, useEffect, useRef } from "react";
+import { lazy, memo, Suspense, useEffect, useRef } from "react";
 import { Alert, Avatar, Empty, Space, Spin, Typography } from "antd";
 import type { ChatMessage } from "../../types/chat";
 import type { CitationWorkspaceSelection } from "../../types/citation";
 import type { RagCitation } from "../../types/rag";
-import { AssistantMessageCard } from "./AssistantMessageCard";
 import styles from "./ChatMessageList.module.css";
+
+const AssistantMessageCard = lazy(() =>
+  import("./AssistantMessageCard").then((module) => ({
+    default: module.AssistantMessageCard,
+  })),
+);
 
 interface ChatMessageListProps {
   items: ChatMessage[];
@@ -67,14 +72,15 @@ export const ChatMessageList = memo(function ChatMessageList({
 
         if (!isUser) {
           return (
-            <AssistantMessageCard
-              key={item.id}
-              message={item}
-              selected={isAssistantSelected}
-              selectedCitation={selectedCitation}
-              onNavigatePanel={onAssistantPanelNavigate}
-              onCitationSelect={onCitationSelect}
-            />
+            <Suspense key={item.id} fallback={null}>
+              <AssistantMessageCard
+                message={item}
+                selected={isAssistantSelected}
+                selectedCitation={selectedCitation}
+                onNavigatePanel={onAssistantPanelNavigate}
+                onCitationSelect={onCitationSelect}
+              />
+            </Suspense>
           );
         }
 

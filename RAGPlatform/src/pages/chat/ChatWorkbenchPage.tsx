@@ -47,23 +47,36 @@ function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
 
 function mergeStreamingMessage(
   persistedMessages: ChatMessage[],
+  streamingUserMessage: ChatMessage | null,
   streamingAssistantMessage: ChatMessage | null,
 ): ChatMessage[] {
-  if (!streamingAssistantMessage) {
-    return persistedMessages;
+  let result = persistedMessages;
+
+  if (streamingUserMessage) {
+    const isPersisted = persistedMessages.some(
+      (m) =>
+        m.requestId &&
+        m.requestId === streamingUserMessage.requestId &&
+        m.role === "user",
+    );
+    if (!isPersisted) {
+      result = [...result, streamingUserMessage];
+    }
   }
 
-  const isPersisted = persistedMessages.some(
-    (message) =>
-      message.requestId &&
-      message.requestId === streamingAssistantMessage.requestId &&
-      message.role === "assistant",
-  );
-  if (isPersisted) {
-    return persistedMessages;
+  if (streamingAssistantMessage) {
+    const isPersisted = result.some(
+      (message) =>
+        message.requestId &&
+        message.requestId === streamingAssistantMessage.requestId &&
+        message.role === "assistant",
+    );
+    if (!isPersisted) {
+      result = [...result, streamingAssistantMessage];
+    }
   }
 
-  return [...persistedMessages, streamingAssistantMessage];
+  return result;
 }
 
 export function ChatWorkbenchPage() {
@@ -159,6 +172,7 @@ export function ChatWorkbenchPage() {
     isStreamingAnswer,
     isSubmitting,
     streamingAssistantMessage,
+    streamingUserMessage,
     submitErrorMessage,
     handleAbortStreaming,
     handleSubmit,
@@ -170,8 +184,13 @@ export function ChatWorkbenchPage() {
     navigate,
   });
   const messages = useMemo(
-    () => mergeStreamingMessage(persistedMessages, streamingAssistantMessage),
-    [persistedMessages, streamingAssistantMessage],
+    () =>
+      mergeStreamingMessage(
+        persistedMessages,
+        streamingUserMessage,
+        streamingAssistantMessage,
+      ),
+    [persistedMessages, streamingUserMessage, streamingAssistantMessage],
   );
   const {
     activeAssistantMessage,

@@ -24,6 +24,7 @@ interface UseChatStreamingResult {
   isStreamingAnswer: boolean;
   isSubmitting: boolean;
   streamingAssistantMessage: ChatMessage | null;
+  streamingUserMessage: ChatMessage | null;
   submitErrorMessage: string;
   handleAbortStreaming: () => void;
   handleSubmit: (query: string) => Promise<void>;
@@ -80,6 +81,8 @@ export function useChatStreaming(
   const [isStreamingAnswer, setIsStreamingAnswer] = useState(false);
   const [streamingAssistantMessage, setStreamingAssistantMessage] =
     useState<ChatMessage | null>(null);
+  const [streamingUserMessage, setStreamingUserMessage] =
+    useState<ChatMessage | null>(null);
   const [submitErrorMessage, setSubmitErrorMessage] = useState("");
   const streamingAbortControllerRef = useRef<AbortController | null>(null);
   const {
@@ -92,6 +95,7 @@ export function useChatStreaming(
     streamingAbortControllerRef.current = null;
     setIsStreamingAnswer(false);
     setStreamingAssistantMessage(null);
+    setStreamingUserMessage(null);
     setSubmitErrorMessage("");
   }, [activeConversationId]);
 
@@ -167,6 +171,15 @@ export function useChatStreaming(
           requestId,
           status: "streaming",
         });
+        setStreamingUserMessage({
+          id: `user-${Date.now()}`,
+          role: "user",
+          content: query,
+          createdAt: new Date().toLocaleString("zh-CN", {
+            hour12: false,
+          }),
+          requestId,
+        });
         hasStartedStreaming = true;
 
         const result = await askRagStream(
@@ -197,6 +210,7 @@ export function useChatStreaming(
 
         await invalidateConversationData(result.conversationId);
         setStreamingAssistantMessage(null);
+        setStreamingUserMessage(null);
         hasStartedStreaming = false;
         if (shouldNavigateToCreatedConversation) {
           navigate(`/app/chat/${result.conversationId}`);
@@ -220,12 +234,15 @@ export function useChatStreaming(
         } else if (error instanceof AxiosError) {
           setSubmitErrorMessage(getApiErrorMessage(error));
           setStreamingAssistantMessage(null);
+          setStreamingUserMessage(null);
         } else if (error instanceof Error) {
           setSubmitErrorMessage(getGenericErrorMessage(error));
           setStreamingAssistantMessage(null);
+          setStreamingUserMessage(null);
         } else {
           setSubmitErrorMessage("请求失败，请稍后重试。");
           setStreamingAssistantMessage(null);
+          setStreamingUserMessage(null);
         }
       } finally {
         if (hasStartedStreaming && targetConversationId) {
@@ -260,6 +277,7 @@ export function useChatStreaming(
     isStreamingAnswer,
     isSubmitting: isStreamingAnswer || isCreatingConversation,
     streamingAssistantMessage,
+    streamingUserMessage,
     submitErrorMessage,
     handleAbortStreaming,
     handleSubmit,

@@ -1,12 +1,16 @@
 import { Avatar, Button, Empty, Space, Tag, Typography } from "antd";
-import { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { lazy, memo, Suspense, useMemo } from "react";
 import type { CitationWorkspaceSelection } from "../../types/citation";
 import type { ChatMessage } from "../../types/chat";
 import type { RagCitation } from "../../types/rag";
 import { buildCitationDocumentGroups } from "../../utils/citation-workbench";
 import styles from "./AssistantMessageCard.module.css";
+
+const MarkdownContent = lazy(() =>
+  import("./MarkdownContent").then((module) => ({
+    default: module.MarkdownContent,
+  })),
+);
 
 interface AssistantMessageCardProps {
   message: ChatMessage;
@@ -52,14 +56,14 @@ function renderStatusTag(message: ChatMessage) {
   return <Tag color="success">已完成</Tag>;
 }
 
-export function AssistantMessageCard({
+export const AssistantMessageCard = memo(function AssistantMessageCard({
   message,
   selected,
   selectedCitation,
   onNavigatePanel,
   onCitationSelect,
 }: AssistantMessageCardProps) {
-  const citations = message.citations ?? [];
+  const citations = useMemo(() => message.citations ?? [], [message.citations]);
   const trace = message.trace;
   const isNoRetrievedDocument = trace?.retrievedCount === 0;
   const citationGroups = useMemo(
@@ -91,11 +95,17 @@ export function AssistantMessageCard({
             回答正文
           </Typography.Text>
           <div className={styles.bodyContent}>
-            <div className={styles.markdownBody}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content || "模型未返回正文内容。"}
-              </ReactMarkdown>
-            </div>
+            <Suspense
+              fallback={
+                <Typography.Paragraph className={styles.markdownBody}>
+                  {message.content || "模型未返回正文内容。"}
+                </Typography.Paragraph>
+              }
+            >
+              <MarkdownContent
+                content={message.content || "模型未返回正文内容。"}
+              />
+            </Suspense>
           </div>
         </section>
 
@@ -241,4 +251,4 @@ export function AssistantMessageCard({
       </section>
     </div>
   );
-}
+});

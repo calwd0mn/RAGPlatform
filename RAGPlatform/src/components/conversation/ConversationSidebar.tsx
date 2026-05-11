@@ -1,9 +1,14 @@
-import { memo, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useMemo, useState } from "react";
 import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Flex, Input, Spin } from "antd";
 import type { ConversationItem } from "../../types/chat";
-import { ConversationList } from "./ConversationList";
 import styles from "./ConversationSidebar.module.css";
+
+const ConversationList = lazy(() =>
+  import("./ConversationList").then((module) => ({
+    default: module.ConversationList,
+  })),
+);
 
 interface ConversationSidebarProps {
   conversations: ConversationItem[];
@@ -91,14 +96,16 @@ export const ConversationSidebar = memo(function ConversationSidebar({
 
       {!isLoading && !isError && filteredConversations.length > 0 ? (
         <div className={styles.listScroll}>
-          <ConversationList
-            items={filteredConversations}
-            activeId={activeId}
-            deletingConversationId={deletingConversationId}
-            onSelect={onSelect}
-            onRename={onRename}
-            onDelete={onDelete}
-          />
+          <Suspense fallback={<Spin tip="会话加载中..." />}>
+            <ConversationList
+              items={filteredConversations}
+              activeId={activeId}
+              deletingConversationId={deletingConversationId}
+              onSelect={onSelect}
+              onRename={onRename}
+              onDelete={onDelete}
+            />
+          </Suspense>
         </div>
       ) : null}
     </Flex>

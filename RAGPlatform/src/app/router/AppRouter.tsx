@@ -3,22 +3,11 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { AppLayout } from "../../layouts/AppLayout";
 import { AuthLayout } from "../../layouts/AuthLayout";
-import { Spin } from "antd"; // 可替换为你自定义的整体 loading
+import { ChatWorkbenchPage } from "../../pages/chat/ChatWorkbenchPage";
 
-// 🚨 将原先的 import 替换为 lazy 动态加载
-const ChatWorkbenchPage = lazy(() =>
-  import("../../pages/chat/ChatWorkbenchPage").then((module) => ({
-    default: module.ChatWorkbenchPage,
-  })),
-);
 const DocumentsPage = lazy(() =>
   import("../../pages/documents/DocumentsPage").then((module) => ({
     default: module.DocumentsPage,
-  })),
-);
-const WorkflowPage = lazy(() =>
-  import("../../pages/workflow/WorkflowPage").then((module) => ({
-    default: module.WorkflowPage,
   })),
 );
 const LoginPage = lazy(() =>
@@ -31,45 +20,57 @@ const RegisterPage = lazy(() =>
     default: module.RegisterPage,
   })),
 );
-
-// 全局的加载状态占位组件
-const PageFallback = () => (
-  <div
-    style={{
-      height: "100vh",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-    }}
-  >
-    <Spin size="large" />
-  </div>
+const WorkflowPage = lazy(() =>
+  import("../../pages/workflow/WorkflowPage").then((module) => ({
+    default: module.WorkflowPage,
+  })),
 );
 
 export function AppRouter() {
   return (
-    // ✨ 外层包裹 Suspense 以处理异步加载过程
-    <Suspense fallback={<PageFallback />}>
-      <Routes>
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+    <Routes>
+      <Route element={<AuthLayout />}>
+        <Route
+          path="/login"
+          element={
+            <Suspense fallback={null}>
+              <LoginPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <Suspense fallback={null}>
+              <RegisterPage />
+            </Suspense>
+          }
+        />
+      </Route>
+      <Route element={<ProtectedRoute />}>
+        <Route path="/app" element={<AppLayout />}>
+          <Route index element={<Navigate to="/app/chat" replace />} />
+          <Route path="chat" element={<ChatWorkbenchPage />} />
+          <Route path="chat/:conversationId" element={<ChatWorkbenchPage />} />
+          <Route
+            path="documents"
+            element={
+              <Suspense fallback={null}>
+                <DocumentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="workflow"
+            element={
+              <Suspense fallback={null}>
+                <WorkflowPage />
+              </Suspense>
+            }
+          />
         </Route>
-
-        <Route element={<ProtectedRoute />}>
-          <Route path="/app" element={<AppLayout />}>
-            <Route index element={<Navigate to="/app/chat" replace />} />
-            <Route path="chat" element={<ChatWorkbenchPage />} />
-            <Route
-              path="chat/:conversationId"
-              element={<ChatWorkbenchPage />}
-            />
-            <Route path="documents" element={<DocumentsPage />} />
-            <Route path="workflow" element={<WorkflowPage />} />
-          </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/app/chat" replace />} />
-      </Routes>
-    </Suspense>
+      </Route>
+      <Route path="*" element={<Navigate to="/app/chat" replace />} />
+    </Routes>
   );
 }

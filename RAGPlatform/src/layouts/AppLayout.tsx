@@ -1,17 +1,20 @@
 import {
-  FileTextOutlined,
-  NodeIndexOutlined,
   LogoutOutlined,
-  MessageOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Avatar, Button, Layout, Space, Tabs, Typography } from "antd";
+import { Avatar, Button, Layout, Space, Typography } from "antd";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { KnowledgeBaseSwitcher } from "../components/knowledge-base/KnowledgeBaseSwitcher";
 import { useAuth } from "../hooks/useAuth";
 import styles from "./AppLayout.module.css";
 
 const { Header, Content } = Layout;
+
+const navigationItems = [
+  { key: "/app/chat", label: "对话" },
+  { key: "/app/documents", label: "文档" },
+  { key: "/app/workflow", label: "工作流" },
+];
 
 export function AppLayout() {
   const navigate = useNavigate();
@@ -56,40 +59,21 @@ export function AppLayout() {
           </Space>
         </div>
 
-        <Tabs
-          className={styles.tabs}
-          activeKey={activeTabKey}
-          onChange={(key) => navigate(key)}
-          items={[
-            {
-              key: "/app/chat",
-              label: (
-                <Space size={6}>
-                  <MessageOutlined />
-                  对话
-                </Space>
-              ),
-            },
-            {
-              key: "/app/documents",
-              label: (
-                <Space size={6}>
-                  <FileTextOutlined />
-                  文档
-                </Space>
-              ),
-            },
-            {
-              key: "/app/workflow",
-              label: (
-                <Space size={6}>
-                  <NodeIndexOutlined />
-                  工作流
-                </Space>
-              ),
-            },
-          ]}
-        />
+        <nav className={styles.nav} aria-label="主导航">
+          {navigationItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`${styles.navItem} ${
+                activeTabKey === item.key ? styles.navItemActive : ""
+              }`}
+              aria-current={activeTabKey === item.key ? "page" : undefined}
+              onClick={() => navigate(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </Header>
 
       <Content className={styles.content}>

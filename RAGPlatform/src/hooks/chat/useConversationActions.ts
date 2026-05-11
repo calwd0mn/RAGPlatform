@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { AxiosError } from "axios";
 import { message } from "antd";
 import type { NavigateFunction } from "react-router-dom";
@@ -10,7 +10,6 @@ import type { ConversationItem } from "../../types/chat";
 
 interface UseConversationActionsOptions {
   activeConversationId: string;
-  conversations: ConversationItem[];
   navigate: NavigateFunction;
 }
 
@@ -39,79 +38,73 @@ function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
 export function useConversationActions(
   options: UseConversationActionsOptions,
 ): UseConversationActionsResult {
-  const { activeConversationId, conversations, navigate } = options;
+  const { activeConversationId, navigate } = options;
   const [renameTargetConversation, setRenameTargetConversation] =
     useState<ConversationItem | null>(null);
   const [deletingConversationId, setDeletingConversationId] = useState("");
   const createConversationMutation = useCreateConversation();
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
+  const { mutateAsync: updateConversation } = updateConversationMutation;
+  const { mutateAsync: deleteConversation } = deleteConversationMutation;
 
-  const handleCreateConversation = () => {
-    createConversationMutation.mutate(
-      {},
-      {
-        onSuccess: (createdConversation) => {
-          navigate(`/app/chat/${createdConversation.id}`);
-        },
-      },
-    );
-  };
+  const handleCreateConversation = useCallback(() => {
+    navigate("/app/chat");
+  }, [navigate]);
 
-  const handleOpenRenameConversation = (conversation: ConversationItem) => {
-    setRenameTargetConversation(conversation);
-  };
+  const handleOpenRenameConversation = useCallback(
+    (conversation: ConversationItem) => {
+      setRenameTargetConversation(conversation);
+    },
+    [],
+  );
 
-  const handleCloseRenameConversation = () => {
+  const handleCloseRenameConversation = useCallback(() => {
     setRenameTargetConversation(null);
-  };
+  }, []);
 
-  const handleRenameConversation = async (title: string) => {
-    if (!renameTargetConversation) {
-      return;
-    }
+  const handleRenameConversation = useCallback(
+    async (title: string) => {
+      if (!renameTargetConversation) {
+        return;
+      }
 
-    await updateConversationMutation.mutateAsync({
-      conversationId: renameTargetConversation.id,
-      title,
-    });
-    setRenameTargetConversation(null);
-  };
-
-  const handleDeleteConversation = async (conversation: ConversationItem) => {
-    const remainingConversations = conversations.filter(
-      (item) => item.id !== conversation.id,
-    );
-
-    setDeletingConversationId(conversation.id);
-    try {
-      await deleteConversationMutation.mutateAsync({
-        conversationId: conversation.id,
+      await updateConversation({
+        conversationId: renameTargetConversation.id,
+        title,
       });
+      setRenameTargetConversation(null);
+    },
+    [renameTargetConversation, updateConversation],
+  );
 
-      if (conversation.id !== activeConversationId) {
-        return;
-      }
+  const handleDeleteConversation = useCallback(
+    async (conversation: ConversationItem) => {
+      setDeletingConversationId(conversation.id);
+      try {
+        await deleteConversation({
+          conversationId: conversation.id,
+        });
 
-      const nextConversation = remainingConversations[0];
-      if (nextConversation) {
-        navigate(`/app/chat/${nextConversation.id}`, { replace: true });
-        return;
-      }
+        if (conversation.id !== activeConversationId) {
+          return;
+        }
 
-      navigate("/app/chat", { replace: true });
-    } catch (error) {
-      if (error instanceof AxiosError) {
-        message.error(getApiErrorMessage(error));
-      } else if (error instanceof Error) {
-        message.error(error.message);
-      } else {
-        message.error("请求失败，请稍后重试。");
+        navigate("/app/chat", { replace: true });
+      } catch (error) {
+        if (error instanceof AxiosError) {
+          message.error(getApiErrorMessage(error));
+        } else if (error instanceof Error) {
+          message.error(error.message);
+        } else {
+          message.error("请求失败，请稍后重试。");
+        }
+      } finally {
+        setDeletingConversationId("");
       }
-    } finally {
-      setDeletingConversationId("");
-    }
-  };
+    },
+    [activeConversationId, deleteConversation, navigate],
+  );
 
   return {
     createConversationMutation,

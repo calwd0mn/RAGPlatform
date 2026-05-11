@@ -53,6 +53,7 @@ export function WorkflowCanvasSurface() {
     event.dataTransfer.dropEffect = "copy";
   }, []);
 
+  // 新增节点
   const handleDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();

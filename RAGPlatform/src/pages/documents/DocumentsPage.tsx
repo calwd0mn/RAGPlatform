@@ -119,7 +119,9 @@ export function DocumentsPage() {
           <Button
             size="small"
             type={record.id === currentKnowledgeBaseId ? "primary" : "default"}
-            onClick={() => setCurrentKnowledgeBaseId(record.id)}
+            onClick={() =>
+              setCurrentKnowledgeBaseId(record.id, record.name, record.isDefault)
+            }
           >
             使用
           </Button>
@@ -172,7 +174,7 @@ export function DocumentsPage() {
   const createKnowledgeBaseMutation = useMutation({
     mutationFn: createKnowledgeBase,
     onSuccess: async (record) => {
-      setCurrentKnowledgeBaseId(record.id);
+      setCurrentKnowledgeBaseId(record.id, record.name, record.isDefault);
       setNewKnowledgeBaseName("");
       await refreshKnowledgeBaseQueries();
       message.success("知识库已创建。");
@@ -190,7 +192,10 @@ export function DocumentsPage() {
   const renameKnowledgeBaseMutation = useMutation({
     mutationFn: (input: { knowledgeBaseId: string; name: string }) =>
       updateKnowledgeBase(input.knowledgeBaseId, input.name),
-    onSuccess: async () => {
+    onSuccess: async (record) => {
+      if (record.id === currentKnowledgeBaseId) {
+        setCurrentKnowledgeBaseId(record.id, record.name, record.isDefault);
+      }
       await refreshKnowledgeBaseQueries();
       message.success("知识库已重命名。");
     },
@@ -206,7 +211,11 @@ export function DocumentsPage() {
         knowledgeBaseListQuery.data?.find((item) => item.isDefault) ??
         knowledgeBaseListQuery.data?.[0];
       if (nextKnowledgeBase) {
-        setCurrentKnowledgeBaseId(nextKnowledgeBase.id);
+        setCurrentKnowledgeBaseId(
+          nextKnowledgeBase.id,
+          nextKnowledgeBase.name,
+          nextKnowledgeBase.isDefault,
+        );
       }
       await refreshKnowledgeBaseQueries();
       message.success("知识库已删除。");

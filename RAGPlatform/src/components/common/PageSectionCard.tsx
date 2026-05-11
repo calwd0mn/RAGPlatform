@@ -1,4 +1,3 @@
-import { Card, Typography } from "antd";
 import type { PropsWithChildren, ReactNode } from "react";
 import styles from "./PageSectionCard.module.css";
 
@@ -15,17 +14,18 @@ export function PageSectionCard({
   children,
 }: PageSectionCardProps) {
   return (
-    <Card
-      title={
-        <Typography.Title level={5} className={styles.title}>
-          {title}
-        </Typography.Title>
-      }
-      extra={extra}
-      className={[styles.card, className].filter((value): value is string => Boolean(value)).join(" ")}
-      classNames={{ body: styles.body }}
+    <section
+      className={[styles.card, className]
+        .filter((value): value is string => Boolean(value))
+        .join(" ")}
     >
-      <div className={styles.stack}>{children}</div>
-    </Card>
+      <header className={styles.header}>
+        <h2 className={styles.title}>{title}</h2>
+        {extra ? <div className={styles.extra}>{extra}</div> : null}
+      </header>
+      <div className={styles.body}>
+        <div className={styles.stack}>{children}</div>
+      </div>
+    </section>
   );
 }

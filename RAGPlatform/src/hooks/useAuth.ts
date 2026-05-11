@@ -17,6 +17,7 @@ import {
   clearAccessToken,
   clearSavedUsername,
   getAccessToken,
+  getSavedUsername,
   setAccessToken,
   setSavedUsername,
 } from "../utils/token";
@@ -46,7 +47,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
   const [authStatus, setAuthStatus] = useState<
     "idle" | "loading" | "authenticated" | "unauthenticated"
-  >("idle");
+  >(() => (getAccessToken() ? "authenticated" : "unauthenticated"));
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const clearAuthState = useCallback(() => {
@@ -57,25 +58,37 @@ export function AuthProvider({ children }: PropsWithChildren) {
     queryClient.clear();
   }, [queryClient]);
 
-  const hydrateFromToken = useCallback(async () => {
+  const hydrateFromToken = useCallback(() => {
     if (!getAccessToken()) {
       setCurrentUser(null);
       setAuthStatus("unauthenticated");
       return;
     }
 
-    setAuthStatus("loading");
-    try {
-      const user = await queryClient.fetchQuery({
+    setAuthStatus("authenticated");
+    setCurrentUser((previousUser) =>
+      previousUser ??
+      ({
+        id: "",
+        username: getSavedUsername(),
+        email: "",
+      } satisfies AuthUser),
+    );
+
+    void queryClient
+      .fetchQuery({
         queryKey: queryKeys.auth.profile,
         queryFn: fetchAndStoreCurrentUser,
+        staleTime: 30_000,
+      })
+      .then((user) => {
+        setCurrentUser(user);
+        setAuthStatus("authenticated");
+      })
+      .catch(() => {
+        // 401 responses are handled by the global unauthorized listener.
       });
-      setCurrentUser(user);
-      setAuthStatus("authenticated");
-    } catch {
-      clearAuthState();
-    }
-  }, [clearAuthState, queryClient]);
+  }, [queryClient]);
 
   useEffect(() => {
     void hydrateFromToken();

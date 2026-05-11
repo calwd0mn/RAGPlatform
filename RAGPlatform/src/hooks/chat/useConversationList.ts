@@ -6,7 +6,12 @@ import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ConversationItem } from "../../types/chat";
 
-export function useConversationList() {
+interface UseConversationListOptions {
+  enabled?: boolean;
+}
+
+export function useConversationList(options: UseConversationListOptions = {}) {
+  const { enabled = true } = options;
   const knowledgeBaseId = useKnowledgeBaseStore(
     (state) => state.currentKnowledgeBaseId,
   );
@@ -14,6 +19,6 @@ export function useConversationList() {
   return useQuery<ConversationItem[], AxiosError<ApiErrorPayload>>({
     queryKey: queryKeys.conversations.list(knowledgeBaseId),
     queryFn: () => getConversations(knowledgeBaseId),
-    enabled: knowledgeBaseId.length > 0,
+    enabled: enabled && knowledgeBaseId.length > 0,
   });
 }

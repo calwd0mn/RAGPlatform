@@ -1,57 +1,49 @@
-import { useEffect } from "react";
-import { Select, Space, Tag, Typography } from "antd";
-import { useKnowledgeBaseList } from "../../hooks/knowledge-base/useKnowledgeBaseList";
+import { lazy, Suspense, useState } from "react";
+import { Button, Space, Tag, Typography } from "antd";
 import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 
+const KnowledgeBaseSelect = lazy(() =>
+  import("./KnowledgeBaseSelect").then((module) => ({
+    default: module.KnowledgeBaseSelect,
+  })),
+);
+
 export function KnowledgeBaseSwitcher() {
-  const knowledgeBaseListQuery = useKnowledgeBaseList();
+  const [isSelecting, setIsSelecting] = useState(false);
   const currentKnowledgeBaseId = useKnowledgeBaseStore(
     (state) => state.currentKnowledgeBaseId,
   );
-  const setCurrentKnowledgeBaseId = useKnowledgeBaseStore(
-    (state) => state.setCurrentKnowledgeBaseId,
+  const currentKnowledgeBaseIsDefault = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseIsDefault,
   );
-
-  useEffect(() => {
-    const list = knowledgeBaseListQuery.data ?? [];
-    if (list.length === 0) {
-      return;
-    }
-
-    const existing = list.find((item) => item.id === currentKnowledgeBaseId);
-    if (existing) {
-      return;
-    }
-
-    const nextKnowledgeBase = list.find((item) => item.isDefault) ?? list[0];
-    if (nextKnowledgeBase) {
-      setCurrentKnowledgeBaseId(nextKnowledgeBase.id);
-    }
-  }, [
-    currentKnowledgeBaseId,
-    knowledgeBaseListQuery.data,
-    setCurrentKnowledgeBaseId,
-  ]);
-
-  const selectedKnowledgeBase = (knowledgeBaseListQuery.data ?? []).find(
-    (item) => item.id === currentKnowledgeBaseId,
+  const currentKnowledgeBaseName = useKnowledgeBaseStore(
+    (state) => state.currentKnowledgeBaseName,
   );
+  const knowledgeBaseLabel =
+    currentKnowledgeBaseName || (currentKnowledgeBaseId ? "已选择知识库" : "选择知识库");
 
   return (
     <Space size={8}>
       <Typography.Text>知识库</Typography.Text>
-      <Select
-        value={currentKnowledgeBaseId || undefined}
-        loading={knowledgeBaseListQuery.isLoading}
-        style={{ minWidth: 220 }}
-        options={(knowledgeBaseListQuery.data ?? []).map((item) => ({
-          label: item.name,
-          value: item.id,
-        }))}
-        onChange={(value: string) => setCurrentKnowledgeBaseId(value)}
-        placeholder="选择知识库"
-      />
-      {selectedKnowledgeBase?.isDefault ? <Tag>默认</Tag> : null}
+      {isSelecting ? (
+        <Suspense
+          fallback={
+            <Button style={{ minWidth: 220 }} loading>
+              {knowledgeBaseLabel}
+            </Button>
+          }
+        >
+          <KnowledgeBaseSelect onSelected={() => setIsSelecting(false)} />
+        </Suspense>
+      ) : (
+        <Button
+          style={{ minWidth: 220 }}
+          onClick={() => setIsSelecting(true)}
+        >
+          {knowledgeBaseLabel}
+        </Button>
+      )}
+      {currentKnowledgeBaseIsDefault ? <Tag>默认</Tag> : null}
     </Space>
   );
 }

@@ -86,6 +86,7 @@ export function StartWorkflowNode({ id, data }: WorkflowNodeProps) {
       <Typography.Text type="secondary" className={styles.nodeMeta}>
         工作流入口
       </Typography.Text>
+      {/* React Flow 组件,Handle用于自定义连接点 */}
       <Handle type="source" position={Position.Right} />
     </NodeShell>
   );

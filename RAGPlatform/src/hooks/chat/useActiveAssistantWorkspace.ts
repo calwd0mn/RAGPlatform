@@ -3,7 +3,17 @@ import { useCitationWorkspaceStore } from "../../stores/citation-workspace.store
 import type { ChatMessage } from "../../types/chat";
 import type { RagCitation } from "../../types/rag";
 
-type EvidenceTabKey = "evidence" | "trace";
+export type EvidenceTabKey = "evidence" | "trace";
+
+export interface PanelTabRequest {
+  tab: EvidenceTabKey;
+  requestId: number;
+}
+
+interface FocusedAssistantMessage {
+  conversationId: string;
+  messageId: string;
+}
 
 interface UseActiveAssistantWorkspaceOptions {
   activeConversationId: string;
@@ -12,10 +22,10 @@ interface UseActiveAssistantWorkspaceOptions {
 
 interface UseActiveAssistantWorkspaceResult {
   activeAssistantMessage: ChatMessage | undefined;
-  activePanelTab: EvidenceTabKey;
   currentConversationSelectedCitation: ReturnType<
     typeof useCitationWorkspaceStore.getState
   >["selectedCitation"];
+  panelTabRequest: PanelTabRequest;
   focusEvidencePanelForMessage: (messageId: string) => void;
   handleAssistantPanelNavigate: (
     messageId: string,
@@ -30,17 +40,18 @@ interface UseActiveAssistantWorkspaceResult {
     message: ChatMessage,
     citationIndex: number,
   ) => void;
-  handlePanelTabChange: (nextTab: string) => void;
 }
 
 export function useActiveAssistantWorkspace(
   options: UseActiveAssistantWorkspaceOptions,
 ): UseActiveAssistantWorkspaceResult {
   const { activeConversationId, messages } = options;
-  const [activePanelTab, setActivePanelTab] = useState<EvidenceTabKey>("evidence");
-  const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<
-    string | null
-  >(null);
+  const [focusedAssistantMessage, setFocusedAssistantMessage] =
+    useState<FocusedAssistantMessage | null>(null);
+  const [panelTabRequest, setPanelTabRequest] = useState<PanelTabRequest>({
+    tab: "evidence",
+    requestId: 0,
+  });
   const selectedCitation = useCitationWorkspaceStore(
     (state) => state.selectedCitation,
   );
@@ -52,7 +63,8 @@ export function useActiveAssistantWorkspace(
   );
 
   const assistantMessages = useMemo(
-    () => messages.filter((item): item is ChatMessage => item.role === "assistant"),
+    () =>
+      messages.filter((item): item is ChatMessage => item.role === "assistant"),
     [messages],
   );
   const currentConversationSelectedCitation = useMemo(() => {
@@ -78,9 +90,13 @@ export function useActiveAssistantWorkspace(
         return matchedByCitation;
       }
     }
-    if (activeAssistantMessageId) {
+    const focusedAssistantMessageId =
+      focusedAssistantMessage?.conversationId === activeConversationId
+        ? focusedAssistantMessage.messageId
+        : null;
+    if (focusedAssistantMessageId) {
       const matchedMessage = assistantMessages.find(
-        (item) => item.id === activeAssistantMessageId,
+        (item) => item.id === focusedAssistantMessageId,
       );
       if (matchedMessage) {
         return matchedMessage;
@@ -88,34 +104,22 @@ export function useActiveAssistantWorkspace(
     }
     return assistantMessages[assistantMessages.length - 1];
   }, [
-    activeAssistantMessageId,
+    activeConversationId,
     assistantMessages,
     currentConversationSelectedCitation,
+    focusedAssistantMessage,
   ]);
 
+  const requestPanelTab = useCallback((tab: EvidenceTabKey) => {
+    setPanelTabRequest((previous) => ({
+      tab,
+      requestId: previous.requestId + 1,
+    }));
+  }, []);
+
   useEffect(() => {
-    setActiveAssistantMessageId(null);
-    setActivePanelTab("evidence");
     clearSelectedCitation();
   }, [activeConversationId, clearSelectedCitation]);
-
-  useEffect(() => {
-    if (!assistantMessages.length) {
-      setActiveAssistantMessageId(null);
-      return;
-    }
-
-    if (
-      activeAssistantMessageId &&
-      assistantMessages.some((item) => item.id === activeAssistantMessageId)
-    ) {
-      return;
-    }
-
-    setActiveAssistantMessageId(
-      assistantMessages[assistantMessages.length - 1].id,
-    );
-  }, [activeAssistantMessageId, assistantMessages]);
 
   useEffect(() => {
     if (!currentConversationSelectedCitation) {
@@ -147,77 +151,88 @@ export function useActiveAssistantWorkspace(
 
   const focusEvidencePanelForMessage = useCallback(
     (messageId: string) => {
-      setActiveAssistantMessageId(messageId);
-      setActivePanelTab("evidence");
+      setFocusedAssistantMessage({
+        conversationId: activeConversationId,
+        messageId,
+      });
+      requestPanelTab("evidence");
       if (selectedCitation?.assistantMessageId !== messageId) {
         clearSelectedCitation();
       }
     },
-    [clearSelectedCitation, selectedCitation],
+    [
+      activeConversationId,
+      clearSelectedCitation,
+      requestPanelTab,
+      selectedCitation,
+    ],
   );
 
-  const handlePanelTabChange = (nextTab: string) => {
-    if (nextTab === "evidence" || nextTab === "trace") {
-      setActivePanelTab(nextTab);
-    }
-  };
+  const handleAssistantPanelNavigate = useCallback(
+    (messageId: string, tab: EvidenceTabKey) => {
+      setFocusedAssistantMessage({
+        conversationId: activeConversationId,
+        messageId,
+      });
+      requestPanelTab(tab);
+      if (selectedCitation?.assistantMessageId !== messageId) {
+        clearSelectedCitation();
+      }
+    },
+    [
+      activeConversationId,
+      clearSelectedCitation,
+      requestPanelTab,
+      selectedCitation,
+    ],
+  );
 
-  const handleAssistantPanelNavigate = (
-    messageId: string,
-    tab: EvidenceTabKey,
-  ) => {
-    setActiveAssistantMessageId(messageId);
-    setActivePanelTab(tab);
-    if (selectedCitation?.assistantMessageId !== messageId) {
-      clearSelectedCitation();
-    }
-  };
+  const handleCitationSelect = useCallback(
+    (message: ChatMessage, citation: RagCitation, citationIndex: number) => {
+      if (!activeConversationId) {
+        return;
+      }
 
-  const handleCitationSelect = (
-    message: ChatMessage,
-    citation: RagCitation,
-    citationIndex: number,
-  ) => {
-    if (!activeConversationId) {
-      return;
-    }
+      setSelectedCitation({
+        conversationId: activeConversationId,
+        assistantMessageId: message.id,
+        citationIndex,
+        documentId: citation.documentId,
+        documentName: citation.documentName,
+        chunkId: citation.chunkId,
+        page: citation.page,
+        content: citation.content,
+        score: citation.score,
+      });
+      setFocusedAssistantMessage({
+        conversationId: activeConversationId,
+        messageId: message.id,
+      });
+      requestPanelTab("evidence");
+    },
+    [activeConversationId, requestPanelTab, setSelectedCitation],
+  );
 
-    setSelectedCitation({
-      conversationId: activeConversationId,
-      assistantMessageId: message.id,
-      citationIndex,
-      documentId: citation.documentId,
-      documentName: citation.documentName,
-      chunkId: citation.chunkId,
-      page: citation.page,
-      content: citation.content,
-      score: citation.score,
-    });
-    setActiveAssistantMessageId(message.id);
-    setActivePanelTab("evidence");
-  };
+  const handleEvidenceCitationSelect = useCallback(
+    (message: ChatMessage, citationIndex: number) => {
+      const citations = message.citations ?? [];
+      const targetCitation = citations[citationIndex];
+      if (!targetCitation) {
+        return;
+      }
 
-  const handleEvidenceCitationSelect = (
-    message: ChatMessage,
-    citationIndex: number,
-  ) => {
-    const citations = message.citations ?? [];
-    const targetCitation = citations[citationIndex];
-    if (!targetCitation) {
-      return;
-    }
-
-    handleCitationSelect(message, targetCitation, citationIndex);
-  };
+      handleCitationSelect(message, targetCitation, citationIndex);
+    },
+    [handleCitationSelect],
+  );
 
   return {
     activeAssistantMessage,
-    activePanelTab,
     currentConversationSelectedCitation,
+    panelTabRequest,
     focusEvidencePanelForMessage,
     handleAssistantPanelNavigate,
     handleCitationSelect,
     handleEvidenceCitationSelect,
-    handlePanelTabChange,
   };
 }

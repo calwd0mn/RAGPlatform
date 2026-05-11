@@ -1,13 +1,17 @@
 import { AxiosError } from "axios";
-import { useCallback, useEffect, useMemo } from "react";
-import { Alert, Col, Row, Tabs, Typography } from "antd";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Alert, Col, Row, Typography } from "antd";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatInputBox } from "../../components/chat/ChatInputBox";
 import { ChatMessageList } from "../../components/chat/ChatMessageList";
-import { EvidencePanel } from "../../components/citation/EvidencePanel";
-import { TracePanel } from "../../components/citation/TracePanel";
 import { PageSectionCard } from "../../components/common/PageSectionCard";
-import { RenameConversationModal } from "../../components/conversation/RenameConversationModal";
 import { ConversationSidebar } from "../../components/conversation/ConversationSidebar";
 import { KnowledgeBaseStatusBar } from "../../components/document/KnowledgeBaseStatusBar";
 import { useActiveAssistantWorkspace } from "../../hooks/chat/useActiveAssistantWorkspace";
@@ -19,6 +23,19 @@ import { useKnowledgeBaseStore } from "../../stores/knowledge-base.store";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage } from "../../types/chat";
 import styles from "./ChatWorkbenchPage.module.css";
+
+const AssistantWorkspaceTabs = lazy(() =>
+  import("../../components/citation/AssistantWorkspaceTabs").then((module) => ({
+    default: module.AssistantWorkspaceTabs,
+  })),
+);
+const RenameConversationModal = lazy(() =>
+  import("../../components/conversation/RenameConversationModal").then(
+    (module) => ({
+      default: module.RenameConversationModal,
+    }),
+  ),
+);
 
 function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
   if (!error?.response?.data?.message) {
@@ -56,7 +73,30 @@ export function ChatWorkbenchPage() {
     (state) => state.currentKnowledgeBaseId,
   );
 
-  const conversationListQuery = useConversationList();
+  const [shouldLoadConversationList, setShouldLoadConversationList] = useState(
+    Boolean(conversationId),
+  );
+  useEffect(() => {
+    if (conversationId) {
+      setShouldLoadConversationList(true);
+      return;
+    }
+
+    setShouldLoadConversationList(false);
+    if (currentKnowledgeBaseId.length === 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShouldLoadConversationList(true);
+    }, 2_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [conversationId, currentKnowledgeBaseId]);
+
+  const conversationListQuery = useConversationList({
+    enabled: shouldLoadConversationList,
+  });
   const activeConversationId = conversationId ?? "";
   const activeConversation = useMemo(
     () =>
@@ -78,7 +118,6 @@ export function ChatWorkbenchPage() {
     updateConversationMutation,
   } = useConversationActions({
     activeConversationId,
-    conversations: conversationListQuery.data ?? [],
     navigate,
   });
 
@@ -92,23 +131,18 @@ export function ChatWorkbenchPage() {
       return;
     }
 
-    if (conversationId) {
-      const matchedConversation = conversationListQuery.data?.find(
-        (item) => item.id === conversationId,
-      );
-      if (matchedConversation) {
-        return;
-      }
-    }
-
-    const firstConversation = conversationListQuery.data?.[0];
-    if (firstConversation) {
-      navigate(`/app/chat/${firstConversation.id}`, { replace: true });
+    if (!conversationId) {
       return;
     }
-    if (conversationId) {
-      navigate("/app/chat", { replace: true });
+
+    const matchedConversation = conversationListQuery.data?.find(
+      (item) => item.id === conversationId,
+    );
+    if (matchedConversation) {
+      return;
     }
+
+    navigate("/app/chat", { replace: true });
   }, [
     conversationId,
     conversationListQuery.data,
@@ -117,7 +151,10 @@ export function ChatWorkbenchPage() {
     navigate,
   ]);
 
-  const persistedMessages = messageListQuery.data ?? [];
+  const persistedMessages = useMemo(
+    () => messageListQuery.data ?? [],
+    [messageListQuery.data],
+  );
   const {
     isStreamingAnswer,
     isSubmitting,
@@ -138,13 +175,12 @@ export function ChatWorkbenchPage() {
   );
   const {
     activeAssistantMessage,
-    activePanelTab,
     currentConversationSelectedCitation,
     focusEvidencePanelForMessage,
     handleAssistantPanelNavigate,
     handleCitationSelect,
     handleEvidenceCitationSelect,
-    handlePanelTabChange,
+    panelTabRequest,
   } = useActiveAssistantWorkspace({
     activeConversationId,
     messages,
@@ -163,34 +199,6 @@ export function ChatWorkbenchPage() {
       navigate(`/app/chat/${nextConversationId}`);
     },
     [navigate],
-  );
-
-  const evidenceTabItems = useMemo(
-    () => [
-      {
-        key: "evidence",
-        label: "Evidence",
-        children: (
-          <EvidencePanel
-            conversationId={activeConversationId}
-            message={activeAssistantMessage}
-            selectedCitation={currentConversationSelectedCitation}
-            onCitationSelect={handleEvidenceCitationSelect}
-          />
-        ),
-      },
-      {
-        key: "trace",
-        label: "Trace",
-        children: <TracePanel message={activeAssistantMessage} />,
-      },
-    ],
-    [
-      activeAssistantMessage,
-      activeConversationId,
-      currentConversationSelectedCitation,
-      handleEvidenceCitationSelect,
-    ],
   );
 
   const askErrorMessage = submitErrorMessage;
@@ -239,7 +247,7 @@ export function ChatWorkbenchPage() {
                   emptyDescription={
                     activeConversationId
                       ? "暂无消息，开始你的第一轮问答"
-                      : "暂无会话，请先新建会话"
+                      : "暂无消息，开始你的第一轮问答"
                   }
                   activeAssistantMessageId={activeAssistantMessage?.id}
                   selectedCitation={currentConversationSelectedCitation}
@@ -270,22 +278,43 @@ export function ChatWorkbenchPage() {
 
         <Col xs={24} lg={6} className={styles.stretchCol}>
           <PageSectionCard title="证据工作区">
-            <Tabs
-              activeKey={activePanelTab}
-              onChange={handlePanelTabChange}
-              items={evidenceTabItems}
-            />
+            {activeAssistantMessage ? (
+              <Suspense
+                fallback={
+                  <Typography.Text type="secondary">
+                    证据工作区加载中...
+                  </Typography.Text>
+                }
+              >
+                <AssistantWorkspaceTabs
+                  key={activeConversationId}
+                  activeConversationId={activeConversationId}
+                  message={activeAssistantMessage}
+                  selectedCitation={currentConversationSelectedCitation}
+                  panelTabRequest={panelTabRequest}
+                  onCitationSelect={handleEvidenceCitationSelect}
+                />
+              </Suspense>
+            ) : (
+              <Typography.Text type="secondary">
+                暂无证据内容
+              </Typography.Text>
+            )}
           </PageSectionCard>
         </Col>
       </Row>
 
-      <RenameConversationModal
-        open={Boolean(renameTargetConversation)}
-        conversation={renameTargetConversation}
-        confirmLoading={updateConversationMutation.isPending}
-        onCancel={handleCloseRenameConversation}
-        onSubmit={handleRenameConversation}
-      />
+      {renameTargetConversation ? (
+        <Suspense fallback={null}>
+          <RenameConversationModal
+            open
+            conversation={renameTargetConversation}
+            confirmLoading={updateConversationMutation.isPending}
+            onCancel={handleCloseRenameConversation}
+            onSubmit={handleRenameConversation}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

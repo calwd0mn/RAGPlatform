@@ -21,13 +21,17 @@ import type {
 } from "../types/workflow";
 
 interface WorkflowEditorState {
+  // 业务数据
   workflowId: string;
   knowledgeBaseId: string;
+  // 编辑态
   flowNodes: WorkflowFlowNode[];
   flowEdges: Edge[];
   selectedNodeId: string;
+  // 运行态
   executionStates: Record<string, WorkflowNodeExecution>;
   finalResult: WorkflowRunFinal | null;
+
   setWorkflow: (workflow: WorkflowRecord) => void;
   resetWorkflow: () => void;
   setFlowNodes: (nodes: WorkflowFlowNode[]) => void;
@@ -64,14 +68,19 @@ const emptyWorkflowState = {
   | "finalResult"
 >;
 
+// 创建仓库
 export const useWorkflowEditorStore = create<WorkflowEditorState>((set) => ({
   ...emptyWorkflowState,
+  // 加载一个工作流到编辑器中
   setWorkflow: (workflow) =>
     set({
+      // 标识
       workflowId: workflow.id,
       knowledgeBaseId: workflow.knowledgeBaseId,
+      // 后端转换
       flowNodes: toFlowNodes(workflow.nodes),
       flowEdges: toFlowEdges(workflow.edges),
+      // 清空选择、运行态
       selectedNodeId: "",
       executionStates: {},
       finalResult: null,

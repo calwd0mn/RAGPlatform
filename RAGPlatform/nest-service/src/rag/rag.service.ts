@@ -658,6 +658,7 @@ export class RagService {
       .exec();
   }
 
+  //  确保幂等请求的用户消息一致
   private ensureIdempotentUserMessageMatches(input: {
     message: MessageDocument;
     conversationId: string;

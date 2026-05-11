@@ -22,7 +22,10 @@ export const EvidencePanel = memo(function EvidencePanel({
   onCitationSelect,
 }: EvidencePanelProps) {
   const navigate = useNavigate();
-  const citations = message?.citations ?? [];
+  const citations = useMemo(
+    () => message?.citations ?? [],
+    [message?.citations],
+  );
   const trace = message?.trace;
   const isNoRetrievedDocument = trace?.retrievedCount === 0;
   const citationGroups = useMemo(
@@ -80,7 +83,9 @@ export const EvidencePanel = memo(function EvidencePanel({
         <Tag color="processing">聚合后 {aggregatedCount}</Tag>
         <Tag>文档组 {citationGroups.length}</Tag>
         <Tag>Trace {trace ? "已返回" : "缺失"}</Tag>
-        {typeof trace?.latencyMs === "number" ? <Tag>Latency {trace.latencyMs} ms</Tag> : null}
+        {typeof trace?.latencyMs === "number" ? (
+          <Tag>Latency {trace.latencyMs} ms</Tag>
+        ) : null}
       </Space>
 
       <Space direction="vertical" size={10} className={styles.list}>
@@ -114,7 +119,9 @@ export const EvidencePanel = memo(function EvidencePanel({
                     selected={isSelected}
                     beforeContext={item.beforeContext?.content}
                     afterContext={item.afterContext?.content}
-                    onSelect={() => onCitationSelect(message, item.citationIndex)}
+                    onSelect={() =>
+                      onCitationSelect(message, item.citationIndex)
+                    }
                     onViewDocument={() => {
                       onCitationSelect(message, item.citationIndex);
                       if (!item.citation.documentId) {

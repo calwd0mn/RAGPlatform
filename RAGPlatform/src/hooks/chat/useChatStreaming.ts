@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import type { NavigateFunction } from "react-router-dom";
@@ -82,6 +82,10 @@ export function useChatStreaming(
     useState<ChatMessage | null>(null);
   const [submitErrorMessage, setSubmitErrorMessage] = useState("");
   const streamingAbortControllerRef = useRef<AbortController | null>(null);
+  const {
+    isPending: isCreatingConversation,
+    mutateAsync: createConversationAsync,
+  } = createConversation;
 
   useEffect(() => {
     streamingAbortControllerRef.current?.abort();
@@ -99,145 +103,162 @@ export function useChatStreaming(
     [],
   );
 
-  const invalidateConversationData = async (
-    conversationId: string,
-  ): Promise<void> => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list(conversationId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
-      }),
-    ]);
-  };
-
-  const handleSubmit = async (nextQuery: string): Promise<void> => {
-    const query = nextQuery.trim();
-    if (!query || isStreamingAnswer || createConversation.isPending) {
-      return;
-    }
-
-    if (currentKnowledgeBaseId.length === 0) {
-      setSubmitErrorMessage("请先选择知识库。");
-      return;
-    }
-
-    if (activeConversationId && !activeConversation) {
-      setSubmitErrorMessage(
-        "当前会话不属于已选知识库，已为你切换回当前知识库。",
-      );
-      navigate("/app/chat", { replace: true });
-      return;
-    }
-
-    setSubmitErrorMessage("");
-    let targetConversationId = activeConversationId;
-    let hasStartedStreaming = false;
-
-    try {
-      if (!targetConversationId) {
-        const createdConversation = await createConversation.mutateAsync({});
-        targetConversationId = createdConversation.id;
-        navigate(`/app/chat/${createdConversation.id}`);
-      }
-
-      const tempAssistantMessageId = `stream-${Date.now()}`;
-      const requestId = createRequestId();
-      const streamController = new AbortController();
-      streamingAbortControllerRef.current?.abort();
-      streamingAbortControllerRef.current = streamController;
-      setIsStreamingAnswer(true);
-      setStreamingAssistantMessage({
-        id: tempAssistantMessageId,
-        role: "assistant",
-        content: "正在生成...",
-        createdAt: new Date().toLocaleString("zh-CN", {
-          hour12: false,
+  const invalidateConversationData = useCallback(
+    async (conversationId: string): Promise<void> => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messages.list(conversationId),
         }),
-        citations: [],
-        trace: undefined,
-        requestId,
-        status: "streaming",
-      });
-      hasStartedStreaming = true;
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.list(currentKnowledgeBaseId),
+        }),
+      ]);
+    },
+    [currentKnowledgeBaseId, queryClient],
+  );
 
-      const result = await askRagStream(
-        {
-          conversationId: targetConversationId,
-          query,
+  const handleSubmit = useCallback(
+    async (nextQuery: string): Promise<void> => {
+      const query = nextQuery.trim();
+      if (!query || isStreamingAnswer || isCreatingConversation) {
+        return;
+      }
+
+      if (currentKnowledgeBaseId.length === 0) {
+        setSubmitErrorMessage("请先选择知识库。");
+        return;
+      }
+
+      if (activeConversationId && !activeConversation) {
+        setSubmitErrorMessage(
+          "当前会话不属于已选知识库，已为你切换回当前知识库。",
+        );
+        navigate("/app/chat", { replace: true });
+        return;
+      }
+
+      setSubmitErrorMessage("");
+      let targetConversationId = activeConversationId;
+      let hasStartedStreaming = false;
+      let shouldNavigateToCreatedConversation = false;
+
+      try {
+        if (!targetConversationId) {
+          const createdConversation = await createConversationAsync({});
+          targetConversationId = createdConversation.id;
+          shouldNavigateToCreatedConversation = true;
+        }
+
+        const tempAssistantMessageId = `stream-${Date.now()}`;
+        const requestId = createRequestId();
+        const streamController = new AbortController();
+        streamingAbortControllerRef.current?.abort();
+        streamingAbortControllerRef.current = streamController;
+        setIsStreamingAnswer(true);
+        setStreamingAssistantMessage({
+          id: tempAssistantMessageId,
+          role: "assistant",
+          content: "正在生成...",
+          createdAt: new Date().toLocaleString("zh-CN", {
+            hour12: false,
+          }),
+          citations: [],
+          trace: undefined,
           requestId,
-        },
-        {
-          signal: streamController.signal,
-          onToken: (token) => {
-            setStreamingAssistantMessage((previous) => {
-              if (!previous || previous.id !== tempAssistantMessageId) {
-                return previous;
-              }
-
-              return {
-                ...previous,
-                content:
-                  previous.content === "正在生成..."
-                    ? token
-                    : `${previous.content}${token}`,
-              };
-            });
-          },
-        },
-      );
-
-      await invalidateConversationData(result.conversationId);
-      setStreamingAssistantMessage(null);
-      hasStartedStreaming = false;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        setStreamingAssistantMessage((previous) => {
-          if (!previous) {
-            return previous;
-          }
-
-          return {
-            ...previous,
-            content:
-              previous.content === "正在生成..."
-                ? "已停止生成。"
-                : previous.content,
-            status: "interrupted",
-          };
+          status: "streaming",
         });
-      } else if (error instanceof AxiosError) {
-        setSubmitErrorMessage(getApiErrorMessage(error));
-        setStreamingAssistantMessage(null);
-      } else if (error instanceof Error) {
-        setSubmitErrorMessage(getGenericErrorMessage(error));
-        setStreamingAssistantMessage(null);
-      } else {
-        setSubmitErrorMessage("请求失败，请稍后重试。");
-        setStreamingAssistantMessage(null);
-      }
-    } finally {
-      if (hasStartedStreaming && targetConversationId) {
-        await invalidateConversationData(targetConversationId);
-      }
-      setIsStreamingAnswer(false);
-      streamingAbortControllerRef.current = null;
-    }
-  };
+        hasStartedStreaming = true;
 
-  const handleAbortStreaming = () => {
+        const result = await askRagStream(
+          {
+            conversationId: targetConversationId,
+            query,
+            requestId,
+          },
+          {
+            signal: streamController.signal,
+            onToken: (token) => {
+              setStreamingAssistantMessage((previous) => {
+                if (!previous || previous.id !== tempAssistantMessageId) {
+                  return previous;
+                }
+
+                return {
+                  ...previous,
+                  content:
+                    previous.content === "正在生成..."
+                      ? token
+                      : `${previous.content}${token}`,
+                };
+              });
+            },
+          },
+        );
+
+        await invalidateConversationData(result.conversationId);
+        setStreamingAssistantMessage(null);
+        hasStartedStreaming = false;
+        if (shouldNavigateToCreatedConversation) {
+          navigate(`/app/chat/${result.conversationId}`);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setStreamingAssistantMessage((previous) => {
+            if (!previous) {
+              return previous;
+            }
+
+            return {
+              ...previous,
+              content:
+                previous.content === "正在生成..."
+                  ? "已停止生成。"
+                  : previous.content,
+              status: "interrupted",
+            };
+          });
+        } else if (error instanceof AxiosError) {
+          setSubmitErrorMessage(getApiErrorMessage(error));
+          setStreamingAssistantMessage(null);
+        } else if (error instanceof Error) {
+          setSubmitErrorMessage(getGenericErrorMessage(error));
+          setStreamingAssistantMessage(null);
+        } else {
+          setSubmitErrorMessage("请求失败，请稍后重试。");
+          setStreamingAssistantMessage(null);
+        }
+      } finally {
+        if (hasStartedStreaming && targetConversationId) {
+          await invalidateConversationData(targetConversationId);
+        }
+        setIsStreamingAnswer(false);
+        streamingAbortControllerRef.current = null;
+      }
+    },
+    [
+      activeConversation,
+      activeConversationId,
+      createConversationAsync,
+      currentKnowledgeBaseId,
+      invalidateConversationData,
+      isCreatingConversation,
+      isStreamingAnswer,
+      navigate,
+    ],
+  );
+
+  const handleAbortStreaming = useCallback(() => {
     const activeController = streamingAbortControllerRef.current;
     if (!activeController) {
       return;
     }
 
     activeController.abort();
-  };
+  }, []);
 
   return {
     isStreamingAnswer,
-    isSubmitting: isStreamingAnswer || createConversation.isPending,
+    isSubmitting: isStreamingAnswer || isCreatingConversation,
     streamingAssistantMessage,
     submitErrorMessage,
     handleAbortStreaming,

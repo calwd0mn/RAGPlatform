@@ -5,9 +5,193 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ragplatform</title>
+    <style>
+      .http-app-shell {
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        background: #f8fafc;
+        color: rgba(0, 0, 0, 0.88);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      #root:not(:empty) + .http-app-shell {
+        display: none;
+      }
+
+      .http-app-shell,
+      .http-app-shell * {
+        box-sizing: border-box;
+      }
+
+      .http-app-shell__header {
+        height: 98px;
+        border-bottom: 1px solid #f0f0f0;
+        background: #ffffff;
+        padding: 12px 20px 0;
+      }
+
+      .http-app-shell__topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 8px;
+      }
+
+      .http-app-shell__brand {
+        margin: 0;
+        color: #164e63;
+        font-size: 20px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      .http-app-shell__tools {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .http-app-shell__tool {
+        height: 32px;
+        border: 1px solid #d9d9d9;
+        border-radius: 6px;
+        background: #ffffff;
+      }
+
+      .http-app-shell__tool--select {
+        width: 156px;
+      }
+
+      .http-app-shell__tool--avatar {
+        width: 96px;
+      }
+
+      .http-app-shell__nav {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        height: 37px;
+      }
+
+      .http-app-shell__nav-item {
+        width: 42px;
+        height: 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+      }
+
+      .http-app-shell__nav-item:first-child {
+        background: #0891b2;
+      }
+
+      .http-app-shell__content {
+        display: grid;
+        min-height: calc(100vh - 98px);
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        padding: 20px;
+      }
+
+      .http-app-shell__status,
+      .http-app-shell__workspace {
+        border: 1px solid #f0f0f0;
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .http-app-shell__status {
+        height: 46px;
+      }
+
+      .http-app-shell__workspace {
+        display: grid;
+        min-height: 360px;
+        grid-template-columns: 1fr 2fr 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .http-app-shell__pane {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .http-app-shell__line,
+      .http-app-shell__block {
+        border-radius: 6px;
+        background: #f1f5f9;
+      }
+
+      .http-app-shell__line {
+        height: 18px;
+      }
+
+      .http-app-shell__line--short {
+        width: 62%;
+      }
+
+      .http-app-shell__block {
+        flex: 1;
+        min-height: 180px;
+      }
+
+      @media (max-width: 900px) {
+        .http-app-shell__tools {
+          display: none;
+        }
+
+        .http-app-shell__workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .http-app-shell__pane:first-child,
+        .http-app-shell__pane:last-child {
+          display: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div class="http-app-shell" aria-hidden="true">
+      <header class="http-app-shell__header">
+        <div class="http-app-shell__topbar">
+          <h1 class="http-app-shell__brand">RAG Platform</h1>
+          <div class="http-app-shell__tools">
+            <div class="http-app-shell__tool http-app-shell__tool--select"></div>
+            <div class="http-app-shell__tool http-app-shell__tool--avatar"></div>
+          </div>
+        </div>
+        <nav class="http-app-shell__nav">
+          <span class="http-app-shell__nav-item"></span>
+          <span class="http-app-shell__nav-item"></span>
+          <span class="http-app-shell__nav-item"></span>
+        </nav>
+      </header>
+      <main class="http-app-shell__content">
+        <div class="http-app-shell__status"></div>
+        <section class="http-app-shell__workspace">
+          <div class="http-app-shell__pane">
+            <div class="http-app-shell__line"></div>
+            <div class="http-app-shell__line http-app-shell__line--short"></div>
+            <div class="http-app-shell__block"></div>
+          </div>
+          <div class="http-app-shell__pane">
+            <div class="http-app-shell__line"></div>
+            <div class="http-app-shell__block"></div>
+          </div>
+          <div class="http-app-shell__pane">
+            <div class="http-app-shell__line http-app-shell__line--short"></div>
+            <div class="http-app-shell__block"></div>
+          </div>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -60,8 +60,11 @@
       "path": "cz-vinyl"
     }
   },
-  "lint_staged": {
-    "*.{ts,js,tsx}": "eslint",
-    "*.{css,scss,css}": "stylelint"
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,scss,md,json}": "prettier --write"
   }
 }

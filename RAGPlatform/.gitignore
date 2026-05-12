@@ -28,3 +28,11 @@ test*
 *.njsproj
 *.sln
 *.sw?
+.codex
+.runtime
+
+.codex/skills/ui-ux-pro-max/
+
+.runtime/mineru-artifacts/
+
+docs/

@@ -34,6 +34,9 @@ class MessageCitationSchemaClass implements MessageCitation {
 @Schema({ _id: false })
 class MessageTraceSchemaClass implements MessageTrace {
   @Prop()
+  mode?: 'rag' | 'chat';
+
+  @Prop()
   knowledgeBaseId?: string;
 
   @Prop()

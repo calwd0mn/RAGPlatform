@@ -1,4 +1,5 @@
 export interface RagTrace {
+  mode?: 'rag' | 'chat';
   knowledgeBaseId: string;
   query: string;
   rewrittenQuery?: string;

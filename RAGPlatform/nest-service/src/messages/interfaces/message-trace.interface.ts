@@ -1,4 +1,5 @@
 export interface MessageTrace {
+  mode?: 'rag' | 'chat';
   knowledgeBaseId?: string;
   query?: string;
   rewrittenQuery?: string;

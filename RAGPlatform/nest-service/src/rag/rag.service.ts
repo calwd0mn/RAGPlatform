@@ -208,11 +208,13 @@ export class RagService {
       throw new BadRequestException('query must not be empty');
     }
 
-    const topK = dto.topK ?? getRagRetrievalConfig().topKDefault;
-    const promptDefinition = this.promptRegistry.getCurrent();
+    const mode = dto.mode ?? 'rag';
+    const topK =
+      mode === 'rag' ? dto.topK ?? getRagRetrievalConfig().topKDefault : 0;
+    const promptDefinition = this.promptRegistry.getCurrent(mode);
     const startedAt = Date.now();
     let retrievedChunks: RetrievedChunk[] = [];
-    let retrievalProvider = '';
+    let retrievalProvider = mode === 'chat' ? 'none' : '';
     let knowledgeBaseId = '';
     let assistantMessage: MessageDocument | null = null;
     let lastFlushedAnswer = '';
@@ -249,21 +251,27 @@ export class RagService {
         content: query,
         requestId: dto.requestId,
       });
-      // 进入检索
-      const retrievalOutput =
-        await this.ragRetrievalService.retrieveTopKByQueryWithProvider({
-          userId,
-          knowledgeBaseId,
-          query,
-          topK,
-        });
-      retrievedChunks = retrievalOutput.chunks;
-      retrievalProvider = retrievalOutput.provider;
-      const citations = retrievedChunks.map(
-        (chunk): RagCitation => this.chunkToCitationMapper.map(chunk),
-      );
+      let citations: RagCitation[] = [];
+      if (mode === 'rag') {
+        // 进入检索
+        const retrievalOutput =
+          await this.ragRetrievalService.retrieveTopKByQueryWithProvider({
+            userId,
+            knowledgeBaseId,
+            query,
+            topK,
+          });
+        retrievedChunks = retrievalOutput.chunks;
+        retrievalProvider = retrievalOutput.provider;
+        citations = retrievedChunks.map(
+          (chunk): RagCitation => this.chunkToCitationMapper.map(chunk),
+        );
+      }
 
-      const preparedAnswer = this.prepareFallbackAnswer(retrievedChunks);
+      const preparedAnswer =
+        mode === 'rag'
+          ? this.prepareFallbackAnswer(retrievedChunks)
+          : this.prepareChatFallbackAnswer(query);
       const createdAssistantMessage = await this.createMessageAndTouch({
         userId,
         conversationId: dto.conversationId,
@@ -320,6 +328,7 @@ export class RagService {
       });
 
       const trace: MessageTrace = {
+        mode,
         knowledgeBaseId,
         query,
         topK,
@@ -352,6 +361,7 @@ export class RagService {
         answer: finalAnswer,
         citations,
         trace: {
+          mode,
           knowledgeBaseId,
           query,
           topK,
@@ -531,6 +541,10 @@ export class RagService {
     return `基于已检索到的信息，可参考以下证据：\n${supportingLines}`;
   }
 
+  private prepareChatFallbackAnswer(query: string): string {
+    return `普通问答模式已启用。你问的是：${query}`;
+  }
+
   private async findCompletedIdempotentAnswer(input: {
     userId: string;
     conversationId: string;
@@ -693,6 +707,7 @@ export class RagService {
 
   private toRagTrace(trace: MessageTrace | undefined): RagTrace {
     return {
+      mode: trace?.mode,
       knowledgeBaseId: trace?.knowledgeBaseId ?? '',
       query: trace?.query ?? '',
       rewrittenQuery: trace?.rewrittenQuery,

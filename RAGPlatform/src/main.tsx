@@ -7,6 +7,7 @@ import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    {/* 通过组件式创建browser路由，而不是使用createBrowserRouter */}
     <BrowserRouter>
       <AppProviders>
         <App />

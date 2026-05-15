@@ -26,6 +26,7 @@ export interface RagTraceStep {
 }
 
 export interface RagTrace {
+  mode?: RagAskMode;
   knowledgeBaseId?: string;
   query?: string;
   rewrittenQuery?: string;
@@ -39,9 +40,12 @@ export interface RagTrace {
   latencyMs?: number;
 }
 
+export type RagAskMode = "rag" | "chat";
+
 export interface RagAskRequest {
   conversationId: string;
   query: string;
+  mode?: RagAskMode;
   topK?: number;
   requestId?: string;
 }

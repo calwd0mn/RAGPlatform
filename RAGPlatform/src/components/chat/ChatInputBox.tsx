@@ -2,10 +2,11 @@ import { memo, useEffect, useState } from "react";
 import { Button, Input, Space } from "antd";
 import { SendOutlined, StopOutlined } from "@ant-design/icons";
 import type { KeyboardEvent } from "react";
+import type { RagAskMode } from "../../types/rag";
 import styles from "./ChatInputBox.module.css";
 
 interface ChatInputBoxProps {
-  onSubmit: (value: string) => void;
+  onSubmit: (value: string, mode: RagAskMode) => void;
   onAbort?: () => void;
   submitting?: boolean;
   streaming?: boolean;
@@ -22,6 +23,7 @@ export const ChatInputBox = memo(function ChatInputBox({
   resetKey = "",
 }: ChatInputBoxProps) {
   const [value, setValue] = useState("");
+  const [mode, setMode] = useState<RagAskMode>("rag");
 
   useEffect(() => {
     if (!submitting) {
@@ -43,9 +45,11 @@ export const ChatInputBox = memo(function ChatInputBox({
       return;
     }
     event.preventDefault();
-    void onSubmit(value);
+    void onSubmit(value, mode);
   };
   const isButtonDisabled = disabled || (submitting && !streaming);
+  const modeButtonLabel = mode === "rag" ? "RAG问答" : "普通问答";
+  const nextMode: RagAskMode = mode === "rag" ? "chat" : "rag";
 
   return (
     <Space direction="vertical" size={12} className={styles.stack}>
@@ -57,16 +61,25 @@ export const ChatInputBox = memo(function ChatInputBox({
         onPressEnter={handlePressEnter}
         disabled={disabled}
       />
-      <Button
-        type={streaming ? "default" : "primary"}
-        danger={streaming}
-        icon={streaming ? <StopOutlined /> : <SendOutlined />}
-        onClick={streaming ? onAbort : () => void onSubmit(value)}
-        loading={submitting && !streaming}
-        disabled={isButtonDisabled}
-      >
-        {streaming ? "停止生成" : "发送消息"}
-      </Button>
+      <Space size={8} className={styles.actions}>
+        <Button
+          type="default"
+          onClick={() => setMode(nextMode)}
+          disabled={disabled || submitting}
+        >
+          {modeButtonLabel}
+        </Button>
+        <Button
+          type={streaming ? "default" : "primary"}
+          danger={streaming}
+          icon={streaming ? <StopOutlined /> : <SendOutlined />}
+          onClick={streaming ? onAbort : () => void onSubmit(value, mode)}
+          loading={submitting && !streaming}
+          disabled={isButtonDisabled}
+        >
+          {streaming ? "停止生成" : "发送消息"}
+        </Button>
+      </Space>
     </Space>
   );
 });

@@ -1,5 +1,6 @@
 import {
   IsInt,
+  IsIn,
   IsMongoId,
   IsOptional,
   IsString,
@@ -11,6 +12,10 @@ import {
   MinLength,
 } from 'class-validator';
 
+const ASK_MODES = ['rag', 'chat'] as const;
+
+export type AskMode = (typeof ASK_MODES)[number];
+
 export class AskRagDto {
   @IsMongoId()
   conversationId!: string;
@@ -20,6 +25,10 @@ export class AskRagDto {
   @MaxLength(2000)
   @Matches(/\S/, { message: 'query must not be empty' })
   query!: string;
+
+  @IsOptional()
+  @IsIn(ASK_MODES)
+  mode?: AskMode;
 
   @IsOptional()
   @IsInt()

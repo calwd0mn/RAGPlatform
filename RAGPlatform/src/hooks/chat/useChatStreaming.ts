@@ -6,6 +6,7 @@ import { queryKeys } from "../../constants/queryKeys";
 import { askRagStream } from "../../services/rag";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage, ConversationItem } from "../../types/chat";
+import type { RagAskMode } from "../../types/rag";
 
 interface CreateConversationAction {
   isPending: boolean;
@@ -27,7 +28,7 @@ interface UseChatStreamingResult {
   streamingUserMessage: ChatMessage | null;
   submitErrorMessage: string;
   handleAbortStreaming: () => void;
-  handleSubmit: (query: string) => Promise<void>;
+  handleSubmit: (query: string, mode: RagAskMode) => Promise<void>;
 }
 
 function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
@@ -122,7 +123,7 @@ export function useChatStreaming(
   );
 
   const handleSubmit = useCallback(
-    async (nextQuery: string): Promise<void> => {
+    async (nextQuery: string, mode: RagAskMode): Promise<void> => {
       const query = nextQuery.trim();
       if (!query || isStreamingAnswer || isCreatingConversation) {
         return;
@@ -186,6 +187,7 @@ export function useChatStreaming(
           {
             conversationId: targetConversationId,
             query,
+            mode,
             requestId,
           },
           {

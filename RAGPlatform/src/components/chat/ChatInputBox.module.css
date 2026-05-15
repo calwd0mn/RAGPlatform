@@ -2,6 +2,6 @@
   width: 100%;
 }
 
-.stack :global(.ant-btn) {
+.actions {
   align-self: flex-end;
 }

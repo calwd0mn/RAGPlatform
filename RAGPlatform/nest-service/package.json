@@ -9,7 +9,9 @@
     "cz": "git-cz",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "build": "nest build",
     "start:dev": "nest start --watch",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
@@ -37,7 +39,7 @@
       "^.+\\.(t|j)s$": [
         "ts-jest",
         {
-          "tsconfig": "tsconfig.json",
+          "tsconfig": "tsconfig.spec.json",
           "diagnostics": {
             "ignoreCodes": [
               151002
@@ -53,7 +55,6 @@
     "testEnvironment": "node"
   },
   "dependencies": {
-    "@langchain/community": "^1.1.27",
     "@langchain/core": "^1.1.40",
     "@langchain/mongodb": "^1.1.0",
     "@langchain/openai": "^1.4.4",
@@ -81,6 +82,8 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/cli": "^0.7.0",
+    "@swc/core": "^1.11.0",
     "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",

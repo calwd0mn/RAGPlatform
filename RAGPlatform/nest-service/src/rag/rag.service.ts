@@ -6,11 +6,12 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { BaseMessage } from '@langchain/core/messages';
+import { BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableLambda, RunnableSequence } from '@langchain/core/runnables';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ConversationsService } from '../conversations/services/conversations.service';
+import { Chunk, ChunkDocument } from '../ingestion/schemas/chunk.schema';
 import { MessageGenerationStatus } from '../messages/interfaces/message-generation-status.type';
 import { MessageRoleEnum } from '../messages/interfaces/message-role.type';
 import { MessageTrace } from '../messages/interfaces/message-trace.interface';
@@ -52,6 +53,14 @@ interface MongoHelloResult {
 interface AskExecutionOptions {
   onToken?: (token: string) => Promise<void> | void;
   signal?: AbortSignal;
+}
+
+interface WorkflowChunkRow {
+  _id: Types.ObjectId;
+  documentId: Types.ObjectId;
+  chunkIndex: number;
+  content: string;
+  metadata: RetrievedChunk['metadata'];
 }
 
 interface AnswerChainInput {
@@ -108,6 +117,14 @@ export interface WorkflowRagAnswerResult {
   };
 }
 
+export interface WorkflowLlmInvokeResult {
+  text: string;
+  json: Record<string, string | number | boolean | null> | null;
+  model: string;
+  outputMode: 'text' | 'json';
+  citations: RagCitation[];
+}
+
 @Injectable()
 export class RagService {
   private transactionsSupported: boolean | null = null;
@@ -115,6 +132,8 @@ export class RagService {
   constructor(
     @InjectModel(Message.name)
     private readonly messageModel: Model<MessageDocument>,
+    @InjectModel(Chunk.name)
+    private readonly chunkModel: Model<ChunkDocument>,
     @InjectConnection()
     private readonly connection: Connection,
     private readonly conversationsService: ConversationsService,
@@ -157,6 +176,197 @@ export class RagService {
       ),
       retrievalProvider: retrievalOutput.provider,
     };
+  }
+
+  async invokeLlmForWorkflow(input: {
+    systemPrompt: string;
+    userPrompt: string;
+    outputMode: 'text' | 'json';
+    citations?: RagCitation[];
+    fallbackText?: string;
+  }): Promise<WorkflowLlmInvokeResult> {
+    const normalizedSystemPrompt = input.systemPrompt.trim();
+    const normalizedUserPrompt = input.userPrompt.trim();
+
+    if (normalizedSystemPrompt.length === 0 || normalizedUserPrompt.length === 0) {
+      throw new BadRequestException('workflow llm prompt must not be empty');
+    }
+
+    const fallbackText =
+      input.fallbackText?.trim().length
+        ? input.fallbackText.trim()
+        : this.normalizeWorkflowQuery(normalizedUserPrompt);
+    const dynamicModel = await this.ragChatModelFactory.createDynamic();
+    if (!dynamicModel) {
+      return {
+        text: fallbackText,
+        json: input.outputMode === 'json' ? { text: fallbackText } : null,
+        model: this.ragChatModelFactory.getModelLabel(),
+        outputMode: input.outputMode,
+        citations: input.citations ?? [],
+      };
+    }
+
+    try {
+      const response = await dynamicModel.invoke([
+        new SystemMessage(normalizedSystemPrompt),
+        new HumanMessage(normalizedUserPrompt),
+      ]);
+      const text = response.content.toString().trim();
+      const normalizedText = text.length > 0 ? text : fallbackText;
+      return {
+        text: normalizedText,
+        json:
+          input.outputMode === 'json'
+            ? this.tryParseWorkflowJson(normalizedText)
+            : null,
+        model: this.ragChatModelFactory.getModelLabel(),
+        outputMode: input.outputMode,
+        citations: input.citations ?? [],
+      };
+    } catch {
+      return {
+        text: fallbackText,
+        json: input.outputMode === 'json' ? { text: fallbackText } : null,
+        model: this.ragChatModelFactory.getModelLabel(),
+        outputMode: input.outputMode,
+        citations: input.citations ?? [],
+      };
+    }
+  }
+
+  async rewriteQueryForWorkflow(input: {
+    query: string;
+  }): Promise<{ originalQuery: string; rewrittenQuery: string; model: string }> {
+    const originalQuery = input.query.trim();
+    if (originalQuery.length === 0) {
+      throw new BadRequestException('workflow query must not be empty');
+    }
+    const llmResult = await this.invokeLlmForWorkflow({
+      systemPrompt: '你是一个严谨的检索助手。',
+      userPrompt: `请把下面的问题改写成更适合检索的查询，保留原意，不要回答问题，只输出改写后的问题：\n${originalQuery}`,
+      outputMode: 'text',
+    });
+
+    return {
+      originalQuery,
+      rewrittenQuery:
+        llmResult.text.length > 0
+          ? this.normalizeWorkflowQuery(llmResult.text)
+          : this.normalizeWorkflowQuery(originalQuery),
+      model: llmResult.model,
+    };
+  }
+
+  async retrieveBm25ForWorkflow(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    query: string;
+    topK: number;
+  }): Promise<WorkflowRagRetrievalResult> {
+    const normalizedUserId = this.toObjectId(input.userId);
+    const normalizedKnowledgeBaseId = this.toObjectId(input.knowledgeBaseId);
+    const rows = await this.chunkModel
+      .find({
+        userId: normalizedUserId,
+        knowledgeBaseId: normalizedKnowledgeBaseId,
+      })
+      .select({
+        _id: 1,
+        documentId: 1,
+        chunkIndex: 1,
+        content: 1,
+        metadata: 1,
+      })
+      .lean<WorkflowChunkRow[]>()
+      .exec();
+
+    const queryTokens = this.tokenizeForWorkflowSearch(input.query);
+    if (rows.length === 0 || queryTokens.length === 0) {
+      return {
+        query: input.query,
+        topK: input.topK,
+        chunks: [],
+        citations: [],
+        retrievalProvider: 'bm25',
+      };
+    }
+
+    const documentFrequencies = new Map<string, number>();
+    const rowTokenMaps = rows.map((row) => {
+      const tokenMap = this.buildTermFrequencyMap(
+        this.tokenizeForWorkflowSearch(row.content),
+      );
+      tokenMap.forEach((_count, token) => {
+        documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
+      });
+      return { row, tokenMap };
+    });
+
+    const scoredRows = rowTokenMaps
+      .map(({ row, tokenMap }) => ({
+        row,
+        score: this.scoreBm25LikeChunk(
+          queryTokens,
+          tokenMap,
+          documentFrequencies,
+          rows.length,
+        ),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, input.topK);
+
+    const chunks = scoredRows.map(
+      (item): RetrievedChunk => ({
+        chunkId: item.row._id.toString(),
+        documentId: item.row.documentId.toString(),
+        chunkIndex: item.row.chunkIndex,
+        content: item.row.content,
+        score: item.score,
+        metadata: item.row.metadata,
+      }),
+    );
+
+    return {
+      query: input.query,
+      topK: input.topK,
+      chunks,
+      citations: this.mapChunksToCitations(chunks),
+      retrievalProvider: 'bm25',
+    };
+  }
+
+  rerankForWorkflow(input: {
+    query: string;
+    chunks: RetrievedChunk[];
+    topK: number;
+    retrievalProvider: string;
+  }): WorkflowRagRetrievalResult {
+    const queryTokens = this.tokenizeForWorkflowSearch(input.query);
+    const chunks = [...input.chunks]
+      .map((chunk) => ({
+        ...chunk,
+        score: this.scoreRerankedChunk(queryTokens, chunk),
+      }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, input.topK);
+
+    return {
+      query: input.query,
+      topK: input.topK,
+      chunks,
+      citations: this.mapChunksToCitations(chunks),
+      retrievalProvider: input.retrievalProvider,
+    };
+  }
+
+  mapChunksToCitations(chunks: RetrievedChunk[]): RagCitation[] {
+    return chunks.map((chunk): RagCitation => this.chunkToCitationMapper.map(chunk));
+  }
+
+  buildWorkflowAnswerFallback(chunks: RetrievedChunk[]): string {
+    return this.prepareFallbackAnswer(chunks);
   }
 
   async answerWorkflow(
@@ -543,6 +753,97 @@ export class RagService {
 
   private prepareChatFallbackAnswer(query: string): string {
     return `普通问答模式已启用。你问的是：${query}`;
+  }
+
+  private normalizeWorkflowQuery(query: string): string {
+    return query.replace(/\s+/g, ' ').trim();
+  }
+
+  private tryParseWorkflowJson(
+    text: string,
+  ): Record<string, string | number | boolean | null> | null {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+
+      const record = parsed as Record<string, unknown>;
+      const normalizedEntries = Object.entries(record).flatMap(([key, value]) => {
+        if (
+          value === null ||
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean'
+        ) {
+          return [[key, value] as const];
+        }
+        return [];
+      });
+
+      return Object.fromEntries(normalizedEntries);
+    } catch {
+      return null;
+    }
+  }
+
+  private tokenizeForWorkflowSearch(content: string): string[] {
+    const normalizedContent = content.trim().toLowerCase();
+    if (normalizedContent.length === 0) {
+      return [];
+    }
+
+    const latinTokens =
+      normalizedContent.match(/[a-z0-9]+/g)?.filter((token) => token.length > 0) ??
+      [];
+    const cjkTokens =
+      normalizedContent.match(/[\u4e00-\u9fff]/g)?.filter((token) => token.length > 0) ??
+      [];
+
+    return [...latinTokens, ...cjkTokens];
+  }
+
+  private buildTermFrequencyMap(tokens: string[]): Map<string, number> {
+    const frequencyMap = new Map<string, number>();
+    tokens.forEach((token) => {
+      frequencyMap.set(token, (frequencyMap.get(token) ?? 0) + 1);
+    });
+    return frequencyMap;
+  }
+
+  private scoreBm25LikeChunk(
+    queryTokens: string[],
+    tokenMap: Map<string, number>,
+    documentFrequencies: Map<string, number>,
+    totalDocumentCount: number,
+  ): number {
+    let score = 0;
+
+    queryTokens.forEach((token) => {
+      const termFrequency = tokenMap.get(token) ?? 0;
+      if (termFrequency <= 0) {
+        return;
+      }
+      const documentFrequency = documentFrequencies.get(token) ?? 0;
+      const inverseDocumentFrequency = Math.log(
+        1 + (totalDocumentCount - documentFrequency + 0.5) / (documentFrequency + 0.5),
+      );
+      score += termFrequency * inverseDocumentFrequency;
+    });
+
+    return score;
+  }
+
+  private scoreRerankedChunk(
+    queryTokens: string[],
+    chunk: RetrievedChunk,
+  ): number {
+    const chunkTokens = new Set(this.tokenizeForWorkflowSearch(chunk.content));
+    const overlapCount = queryTokens.filter((token) => chunkTokens.has(token)).length;
+    const overlapScore =
+      queryTokens.length > 0 ? overlapCount / queryTokens.length : 0;
+
+    return chunk.score * 0.7 + overlapScore * 0.3;
   }
 
   private async findCompletedIdempotentAnswer(input: {

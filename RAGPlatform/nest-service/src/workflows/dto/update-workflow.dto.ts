@@ -18,6 +18,13 @@ const WORKFLOW_NODE_TYPES: WorkflowNodeType[] = [
   'start',
   'userInput',
   'rag',
+  'llm',
+  'queryRewrite',
+  'vectorRetrieve',
+  'bm25Retrieve',
+  'mergeResults',
+  'rerank',
+  'answer',
   'condition',
   'output',
 ];
@@ -67,8 +74,24 @@ class WorkflowNodeDataDto {
   query?: string;
 
   @IsOptional()
+  @IsString()
+  systemPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  userPromptTemplate?: string;
+
+  @IsOptional()
+  @IsIn(['text', 'json'])
+  outputMode?: 'text' | 'json';
+
+  @IsOptional()
   @IsNumber()
   topK?: number;
+
+  @IsOptional()
+  @IsNumber()
+  resultLimit?: number;
 
   @IsOptional()
   @IsArray()
@@ -79,6 +102,10 @@ class WorkflowNodeDataDto {
   @IsOptional()
   @IsString()
   outputValue?: string;
+
+  @IsOptional()
+  @IsString()
+  question?: string;
 }
 
 class WorkflowNodeDto {

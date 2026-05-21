@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Subject } from 'rxjs';
+import type { RagCitation } from '../../rag/interfaces/rag-citation.interface';
 import {
   WorkflowRagAnswerResult,
   WorkflowRagRetrievalResult,
   RagService,
 } from '../../rag/rag.service';
+import type { RetrievedChunk } from '../../rag/interfaces/retrieved-chunk.interface';
 import {
+  WorkflowLlmOutput,
   WorkflowConditionItem,
   WorkflowEdge,
   WorkflowExecutionContext,
@@ -13,6 +16,7 @@ import {
   WorkflowNode,
   WorkflowNodeOutput,
   WorkflowOutputNodeOutput,
+  WorkflowQueryRewriteOutput,
   WorkflowRagOutput,
   WorkflowRunInputs,
 } from '../interfaces/workflow-node.interface';
@@ -70,6 +74,7 @@ export class WorkflowExecutorService {
 
     const nodeMap = new Map(nodes.map((node): [string, WorkflowNode] => [node.id, node]));
     const adjList = this.buildAdjacency(nodes, edges);
+    const incomingMap = this.buildIncomingMap(nodes, edges);
     const runtimeInDegree = this.buildInDegree(nodes, edges);
     const queue = nodes
       .filter((node): boolean => (runtimeInDegree.get(node.id) ?? 0) === 0)
@@ -95,11 +100,13 @@ export class WorkflowExecutorService {
           data: { nodeId, status: 'running' },
         });
         const output = await this.executeNode({
+          nodeId,
           userId: input.userId,
           knowledgeBaseId: workflow.knowledgeBaseId.toString(),
           node,
           inputs: input.inputs,
           context,
+          incomingNodeIds: incomingMap.get(nodeId) ?? [],
         });
         context[nodeId] = output;
         executed.add(nodeId);
@@ -133,11 +140,13 @@ export class WorkflowExecutorService {
   }
 
   private async executeNode(input: {
+    nodeId: string;
     userId: string;
     knowledgeBaseId: string;
     node: WorkflowNode;
     inputs: WorkflowRunInputs;
     context: WorkflowExecutionContext;
+    incomingNodeIds: string[];
   }): Promise<WorkflowNodeOutput> {
     switch (input.node.type) {
       case 'start':
@@ -146,10 +155,28 @@ export class WorkflowExecutorService {
         return this.executeUserInput(input.node, input.inputs);
       case 'rag':
         return this.executeRagNode(input);
+      case 'llm':
+        return this.executeLlmNode(input.node, input.context, input.incomingNodeIds);
+      case 'queryRewrite':
+        return this.executeQueryRewriteNode(input.node, input.context);
+      case 'vectorRetrieve':
+        return this.executeVectorRetrieveNode(input);
+      case 'bm25Retrieve':
+        return this.executeBm25RetrieveNode(input);
+      case 'mergeResults':
+        return this.executeMergeResultsNode(input.node, input.context, input.incomingNodeIds);
+      case 'rerank':
+        return this.executeRerankNode(input.node, input.context, input.incomingNodeIds);
+      case 'answer':
+        return this.executeAnswerNode(input);
       case 'condition':
         return this.executeConditionNode(input.node, input.context);
       case 'output':
-        return this.executeOutputNode(input);
+        return this.executeOutputNode(
+          input.node,
+          input.context,
+          input.incomingNodeIds,
+        );
     }
   }
 
@@ -189,6 +216,186 @@ export class WorkflowExecutorService {
     return this.toRagOutput(retrieval);
   }
 
+  private async executeQueryRewriteNode(
+    node: WorkflowNode,
+    context: WorkflowExecutionContext,
+  ): Promise<WorkflowQueryRewriteOutput> {
+    if (node.data.nodeType !== 'queryRewrite') {
+      throw new BadRequestException('Invalid query rewrite node data');
+    }
+
+    const query = this.resolveTemplate(node.data.query, context);
+    return this.ragService.rewriteQueryForWorkflow({ query });
+  }
+
+  private async executeLlmNode(
+    node: WorkflowNode,
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): Promise<WorkflowLlmOutput> {
+    if (node.data.nodeType !== 'llm') {
+      throw new BadRequestException('Invalid LLM node data');
+    }
+
+    const retrievalOutputs = this.findRetrievalOutputsFromInputs(
+      context,
+      incomingNodeIds,
+    );
+    const latestRetrieval = retrievalOutputs.at(-1);
+
+    return this.ragService.invokeLlmForWorkflow({
+      systemPrompt: this.resolveTemplate(node.data.systemPrompt, context),
+      userPrompt: this.resolveTemplate(node.data.userPromptTemplate, context),
+      outputMode: node.data.outputMode,
+      citations: latestRetrieval?.citations ?? [],
+      fallbackText: latestRetrieval
+        ? this.ragService.buildWorkflowAnswerFallback(latestRetrieval.chunks)
+        : undefined,
+    });
+  }
+
+  private async executeVectorRetrieveNode(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    node: WorkflowNode;
+    context: WorkflowExecutionContext;
+  }): Promise<WorkflowRagOutput> {
+    if (input.node.data.nodeType !== 'vectorRetrieve') {
+      throw new BadRequestException('Invalid vector retrieve node data');
+    }
+
+    const query = this.resolveTemplate(input.node.data.query, input.context);
+    const retrieval = await this.ragService.retrieveForWorkflow({
+      userId: input.userId,
+      knowledgeBaseId: input.knowledgeBaseId,
+      query,
+      topK: input.node.data.topK,
+    });
+    return this.toRagOutput(retrieval);
+  }
+
+  private async executeBm25RetrieveNode(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    node: WorkflowNode;
+    context: WorkflowExecutionContext;
+  }): Promise<WorkflowRagOutput> {
+    if (input.node.data.nodeType !== 'bm25Retrieve') {
+      throw new BadRequestException('Invalid BM25 retrieve node data');
+    }
+
+    const query = this.resolveTemplate(input.node.data.query, input.context);
+    const retrieval = await this.ragService.retrieveBm25ForWorkflow({
+      userId: input.userId,
+      knowledgeBaseId: input.knowledgeBaseId,
+      query,
+      topK: input.node.data.topK,
+    });
+    return this.toRagOutput(retrieval);
+  }
+
+  private executeMergeResultsNode(
+    node: WorkflowNode,
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): WorkflowRagOutput {
+    if (node.data.nodeType !== 'mergeResults') {
+      throw new BadRequestException('Invalid merge results node data');
+    }
+
+    const retrievalOutputs = this.findRetrievalOutputsFromInputs(
+      context,
+      incomingNodeIds,
+    );
+    const mergedChunks = this.mergeChunksByBestScore(
+      retrievalOutputs.flatMap((output) => output.chunks),
+    ).slice(0, node.data.resultLimit);
+    const lastRetrieval = retrievalOutputs.at(-1);
+
+    return {
+      query: lastRetrieval?.query ?? '',
+      topK: node.data.resultLimit,
+      retrievedCount: mergedChunks.length,
+      retrievalProvider: 'merged',
+      chunks: mergedChunks,
+      citations: this.ragService.mapChunksToCitations(mergedChunks),
+    };
+  }
+
+  private executeRerankNode(
+    node: WorkflowNode,
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): WorkflowRagOutput {
+    if (node.data.nodeType !== 'rerank') {
+      throw new BadRequestException('Invalid rerank node data');
+    }
+
+    const retrievalOutputs = this.findRetrievalOutputsFromInputs(
+      context,
+      incomingNodeIds,
+    );
+    const latestRetrieval = retrievalOutputs.at(-1);
+    if (!latestRetrieval) {
+      return {
+        query: this.resolveTemplate(node.data.query, context),
+        topK: node.data.topK,
+        retrievedCount: 0,
+        retrievalProvider: 'rerank',
+        chunks: [],
+        citations: [],
+      };
+    }
+
+    const query = this.resolveTemplate(node.data.query, context);
+    const reranked = this.ragService.rerankForWorkflow({
+      query,
+      chunks: latestRetrieval.chunks,
+      topK: node.data.topK,
+      retrievalProvider: 'rerank',
+    });
+
+    return this.toRagOutput(reranked);
+  }
+
+  private async executeAnswerNode(input: {
+    knowledgeBaseId: string;
+    node: WorkflowNode;
+    context: WorkflowExecutionContext;
+    incomingNodeIds: string[];
+  }): Promise<WorkflowOutputNodeOutput> {
+    if (input.node.data.nodeType !== 'answer') {
+      throw new BadRequestException('Invalid answer node data');
+    }
+
+    const retrievalOutputs = this.findRetrievalOutputsFromInputs(
+      input.context,
+      input.incomingNodeIds,
+    );
+    const latestRetrieval = retrievalOutputs.at(-1);
+    const question = this.resolveTemplate(input.node.data.question, input.context);
+
+    if (!latestRetrieval) {
+      return {
+        finalOutput: '根据当前已检索到的信息无法确定。',
+        citations: [],
+      };
+    }
+
+    const answer: WorkflowRagAnswerResult = await this.ragService.answerWorkflow({
+      knowledgeBaseId: input.knowledgeBaseId,
+      query: question.trim().length > 0 ? question : latestRetrieval.query,
+      topK: latestRetrieval.topK,
+      chunks: latestRetrieval.chunks,
+      retrievalProvider: latestRetrieval.retrievalProvider,
+    });
+
+    return {
+      finalOutput: answer.answer,
+      citations: answer.citations,
+    };
+  }
+
   private executeConditionNode(
     node: WorkflowNode,
     context: WorkflowExecutionContext,
@@ -202,37 +409,18 @@ export class WorkflowExecutorService {
     return { result };
   }
 
-  private async executeOutputNode(input: {
-    knowledgeBaseId: string;
-    node: WorkflowNode;
-    context: WorkflowExecutionContext;
-  }): Promise<WorkflowOutputNodeOutput> {
-    if (input.node.data.nodeType !== 'output') {
+  private executeOutputNode(
+    node: WorkflowNode,
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): WorkflowOutputNodeOutput {
+    if (node.data.nodeType !== 'output') {
       throw new BadRequestException('Invalid output node data');
     }
-    const ragOutput = this.findLatestRagOutput(input.context);
-    const resolvedOutput = this.resolveTemplate(
-      input.node.data.outputValue,
-      input.context,
-    );
-
-    if (!ragOutput) {
-      return { finalOutput: resolvedOutput, citations: [] };
-    }
-
-    const answer: WorkflowRagAnswerResult = await this.ragService.answerWorkflow(
-      {
-        knowledgeBaseId: input.knowledgeBaseId,
-        query: resolvedOutput.trim().length > 0 ? resolvedOutput : ragOutput.query,
-        topK: ragOutput.topK,
-        chunks: ragOutput.chunks,
-        retrievalProvider: ragOutput.retrievalProvider,
-      },
-    );
 
     return {
-      finalOutput: answer.answer,
-      citations: answer.citations,
+      finalOutput: this.resolveTemplate(node.data.outputValue, context),
+      citations: this.findCitationsFromInputs(context, incomingNodeIds),
     };
   }
 
@@ -318,6 +506,20 @@ export class WorkflowExecutorService {
       });
     });
     return adjList;
+  }
+
+  private buildIncomingMap(
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
+  ): Map<string, string[]> {
+    const incomingMap = new Map<string, string[]>();
+    nodes.forEach((node) => {
+      incomingMap.set(node.id, []);
+    });
+    edges.forEach((edge) => {
+      incomingMap.get(edge.target)?.push(edge.source);
+    });
+    return incomingMap;
   }
 
   private buildInDegree(
@@ -423,6 +625,48 @@ export class WorkflowExecutorService {
     return this.isWorkflowValue(current) ? current : undefined;
   }
 
+  private findRetrievalOutputsFromInputs(
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): WorkflowRagOutput[] {
+    return incomingNodeIds
+      .map((nodeId) => context[nodeId])
+      .filter((output): output is WorkflowRagOutput => this.isRagOutput(output));
+  }
+
+  private findCitationsFromInputs(
+    context: WorkflowExecutionContext,
+    incomingNodeIds: string[],
+  ): RagCitation[] {
+    for (const nodeId of [...incomingNodeIds].reverse()) {
+      const output = context[nodeId];
+      if (this.isAnswerLikeOutput(output)) {
+        return output.citations;
+      }
+      if (this.isLlmOutput(output) && output.citations.length > 0) {
+        return output.citations;
+      }
+      if (this.isRagOutput(output)) {
+        return output.citations;
+      }
+    }
+
+    return [];
+  }
+
+  private mergeChunksByBestScore(chunks: RetrievedChunk[]): RetrievedChunk[] {
+    const chunkMap = new Map<string, RetrievedChunk>();
+
+    chunks.forEach((chunk) => {
+      const existingChunk = chunkMap.get(chunk.chunkId);
+      if (!existingChunk || existingChunk.score < chunk.score) {
+        chunkMap.set(chunk.chunkId, chunk);
+      }
+    });
+
+    return Array.from(chunkMap.values()).sort((left, right) => right.score - left.score);
+  }
+
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
   }
@@ -438,19 +682,40 @@ export class WorkflowExecutorService {
     );
   }
 
-  private findLatestRagOutput(
-    context: WorkflowExecutionContext,
-  ): WorkflowRagOutput | null {
-    const outputs = Object.values(context).filter(
-      (output): output is WorkflowRagOutput =>
-        'chunks' in output && 'retrievalProvider' in output,
+  private isRagOutput(value: WorkflowNodeOutput | undefined): value is WorkflowRagOutput {
+    return Boolean(
+      value &&
+        this.isRecord(value) &&
+        'chunks' in value &&
+        'retrievalProvider' in value &&
+        'topK' in value,
     );
-    return outputs.at(-1) ?? null;
+  }
+
+  private isLlmOutput(value: WorkflowNodeOutput | undefined): value is WorkflowLlmOutput {
+    return Boolean(
+      value &&
+        this.isRecord(value) &&
+        'text' in value &&
+        'outputMode' in value &&
+        'citations' in value,
+    );
+  }
+
+  private isAnswerLikeOutput(
+    value: WorkflowNodeOutput | undefined,
+  ): value is WorkflowOutputNodeOutput {
+    return Boolean(
+      value &&
+        this.isRecord(value) &&
+        'finalOutput' in value &&
+        'citations' in value,
+    );
   }
 
   private resolveFinalOutput(context: WorkflowExecutionContext): string {
-    const outputs = Object.values(context).filter(
-      (output): output is WorkflowOutputNodeOutput => 'finalOutput' in output,
+    const outputs = Object.values(context).filter((output): output is WorkflowOutputNodeOutput =>
+      this.isAnswerLikeOutput(output),
     );
     return outputs.at(-1)?.finalOutput ?? '';
   }

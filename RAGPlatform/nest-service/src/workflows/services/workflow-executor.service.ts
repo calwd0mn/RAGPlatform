@@ -248,9 +248,6 @@ export class WorkflowExecutorService {
       userPrompt: this.resolveTemplate(node.data.userPromptTemplate, context),
       outputMode: node.data.outputMode,
       citations: latestRetrieval?.citations ?? [],
-      fallbackText: latestRetrieval
-        ? this.ragService.buildWorkflowAnswerFallback(latestRetrieval.chunks)
-        : undefined,
     });
   }
 

@@ -183,7 +183,6 @@ export class RagService {
     userPrompt: string;
     outputMode: 'text' | 'json';
     citations?: RagCitation[];
-    fallbackText?: string;
   }): Promise<WorkflowLlmInvokeResult> {
     const normalizedSystemPrompt = input.systemPrompt.trim();
     const normalizedUserPrompt = input.userPrompt.trim();
@@ -192,19 +191,11 @@ export class RagService {
       throw new BadRequestException('workflow llm prompt must not be empty');
     }
 
-    const fallbackText =
-      input.fallbackText?.trim().length
-        ? input.fallbackText.trim()
-        : this.normalizeWorkflowQuery(normalizedUserPrompt);
     const dynamicModel = await this.ragChatModelFactory.createDynamic();
     if (!dynamicModel) {
-      return {
-        text: fallbackText,
-        json: input.outputMode === 'json' ? { text: fallbackText } : null,
-        model: this.ragChatModelFactory.getModelLabel(),
-        outputMode: input.outputMode,
-        citations: input.citations ?? [],
-      };
+      throw new InternalServerErrorException(
+        'Workflow LLM node requires a configured chat model',
+      );
     }
 
     try {
@@ -213,25 +204,26 @@ export class RagService {
         new HumanMessage(normalizedUserPrompt),
       ]);
       const text = response.content.toString().trim();
-      const normalizedText = text.length > 0 ? text : fallbackText;
+      if (text.length === 0) {
+        throw new InternalServerErrorException(
+          'Workflow LLM node returned an empty response',
+        );
+      }
       return {
-        text: normalizedText,
+        text,
         json:
           input.outputMode === 'json'
-            ? this.tryParseWorkflowJson(normalizedText)
+            ? this.tryParseWorkflowJson(text)
             : null,
         model: this.ragChatModelFactory.getModelLabel(),
         outputMode: input.outputMode,
         citations: input.citations ?? [],
       };
-    } catch {
-      return {
-        text: fallbackText,
-        json: input.outputMode === 'json' ? { text: fallbackText } : null,
-        model: this.ragChatModelFactory.getModelLabel(),
-        outputMode: input.outputMode,
-        citations: input.citations ?? [],
-      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to invoke workflow LLM node');
     }
   }
 
@@ -363,10 +355,6 @@ export class RagService {
 
   mapChunksToCitations(chunks: RetrievedChunk[]): RagCitation[] {
     return chunks.map((chunk): RagCitation => this.chunkToCitationMapper.map(chunk));
-  }
-
-  buildWorkflowAnswerFallback(chunks: RetrievedChunk[]): string {
-    return this.prepareFallbackAnswer(chunks);
   }
 
   async answerWorkflow(

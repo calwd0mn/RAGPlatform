@@ -30,10 +30,11 @@ export class RagChatModelFactory {
     }
 
     const initChatModel = await loadInitChatModel();
-    return initChatModel(modelName, {
+    const model = await initChatModel(modelName, {
       modelProvider: provider,
       temperature: 0.2,
     });
+    return model as unknown as BaseChatModel;
   }
 
   async create(preparedAnswer: string): Promise<BaseChatModel> {

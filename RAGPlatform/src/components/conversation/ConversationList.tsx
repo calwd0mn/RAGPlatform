@@ -8,7 +8,7 @@ interface ConversationListProps {
   deletingConversationId: string;
   onSelect: (conversationId: string) => void;
   onRename: (conversation: ConversationItem) => void;
-  onDelete: (conversation: ConversationItem) => void;
+  onDelete: (conversation: ConversationItem) => Promise<void>;
 }
 
 export function ConversationList({

@@ -21,7 +21,7 @@ interface ConversationSidebarProps {
   onSelect: (conversationId: string) => void;
   onCreate: () => void;
   onRename: (conversation: ConversationItem) => void;
-  onDelete: (conversation: ConversationItem) => void;
+  onDelete: (conversation: ConversationItem) => Promise<void>;
 }
 
 export const ConversationSidebar = memo(function ConversationSidebar({

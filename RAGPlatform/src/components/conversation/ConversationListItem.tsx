@@ -9,7 +9,7 @@ interface ConversationListItemProps {
   isDeleting: boolean;
   onSelect: (conversationId: string) => void;
   onRename: (conversation: ConversationItem) => void;
-  onDelete: (conversation: ConversationItem) => void;
+  onDelete: (conversation: ConversationItem) => Promise<void>;
 }
 
 export function ConversationListItem({

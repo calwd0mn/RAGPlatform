@@ -5,7 +5,7 @@ import styles from "./ConversationActionsDropdown.module.css";
 interface ConversationActionsDropdownProps {
   disabled?: boolean;
   onRename: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 }
 
 export function ConversationActionsDropdown({
@@ -36,10 +36,7 @@ export function ConversationActionsDropdown({
             okText="删除"
             cancelText="取消"
             placement="left"
-            onConfirm={(event) => {
-              event?.stopPropagation();
-              onDelete();
-            }}
+            onConfirm={() => onDelete()}
             onPopupClick={(event) => {
               event.stopPropagation();
             }}

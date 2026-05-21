@@ -34,6 +34,12 @@ function getExecutionSummary(item: WorkflowNodeExecution): string {
   if ("field" in output && "value" in output) {
     return `${String(output.field)} = ${String(output.value).slice(0, 48)}`;
   }
+  if ("text" in output && "outputMode" in output) {
+    return String(output.text).slice(0, 48) || String(output.outputMode);
+  }
+  if ("rewrittenQuery" in output) {
+    return String(output.rewrittenQuery).slice(0, 48);
+  }
   if ("retrievedCount" in output && "retrievalProvider" in output) {
     return `命中 ${String(output.retrievedCount)} 条 · ${String(output.retrievalProvider)}`;
   }

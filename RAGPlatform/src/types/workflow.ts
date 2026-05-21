@@ -4,6 +4,13 @@ export type WorkflowNodeType =
   | "start"
   | "userInput"
   | "rag"
+  | "llm"
+  | "queryRewrite"
+  | "vectorRetrieve"
+  | "bm25Retrieve"
+  | "mergeResults"
+  | "rerank"
+  | "answer"
   | "condition"
   | "output";
 
@@ -41,6 +48,48 @@ export interface WorkflowRagNodeData extends WorkflowBaseNodeData {
   topK: number;
 }
 
+export type WorkflowLlmOutputMode = "text" | "json";
+
+export interface WorkflowLlmNodeData extends WorkflowBaseNodeData {
+  nodeType: "llm";
+  systemPrompt: string;
+  userPromptTemplate: string;
+  outputMode: WorkflowLlmOutputMode;
+}
+
+export interface WorkflowQueryRewriteNodeData extends WorkflowBaseNodeData {
+  nodeType: "queryRewrite";
+  query: string;
+}
+
+export interface WorkflowVectorRetrieveNodeData extends WorkflowBaseNodeData {
+  nodeType: "vectorRetrieve";
+  query: string;
+  topK: number;
+}
+
+export interface WorkflowBm25RetrieveNodeData extends WorkflowBaseNodeData {
+  nodeType: "bm25Retrieve";
+  query: string;
+  topK: number;
+}
+
+export interface WorkflowMergeResultsNodeData extends WorkflowBaseNodeData {
+  nodeType: "mergeResults";
+  resultLimit: number;
+}
+
+export interface WorkflowRerankNodeData extends WorkflowBaseNodeData {
+  nodeType: "rerank";
+  query: string;
+  topK: number;
+}
+
+export interface WorkflowAnswerNodeData extends WorkflowBaseNodeData {
+  nodeType: "answer";
+  question: string;
+}
+
 export interface WorkflowConditionItem {
   variable: string;
   operator: WorkflowConditionOperator;
@@ -61,6 +110,13 @@ export type WorkflowNodeData =
   | WorkflowStartNodeData
   | WorkflowUserInputNodeData
   | WorkflowRagNodeData
+  | WorkflowLlmNodeData
+  | WorkflowQueryRewriteNodeData
+  | WorkflowVectorRetrieveNodeData
+  | WorkflowBm25RetrieveNodeData
+  | WorkflowMergeResultsNodeData
+  | WorkflowRerankNodeData
+  | WorkflowAnswerNodeData
   | WorkflowConditionNodeData
   | WorkflowOutputNodeData;
 
@@ -136,5 +192,19 @@ export interface WorkflowRagNodeOutput {
   retrievedCount: number;
   retrievalProvider: string;
   citations: RagCitation[];
+}
+
+export interface WorkflowQueryRewriteNodeOutput {
+  originalQuery: string;
+  rewrittenQuery: string;
+  model: string;
+}
+
+export interface WorkflowLlmNodeOutput {
+  text: string;
+  json: Record<string, WorkflowInputValue> | null;
+  model: string;
+  outputMode: WorkflowLlmOutputMode;
+  citations?: RagCitation[];
 }
 

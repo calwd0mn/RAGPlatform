@@ -1,4 +1,4 @@
-import { Empty, Form, Input, InputNumber, Typography } from "antd";
+import { Empty, Form, Input, InputNumber, Select, Typography } from "antd";
 import type {
   WorkflowConditionItem,
   WorkflowNodeData,
@@ -122,6 +122,135 @@ export function WorkflowConfigPanel() {
             />
           </Form.Item>
         </>
+      );
+    }
+    if (selectedNodeData.nodeType === "llm") {
+      return (
+        <>
+          <Form.Item label="System Prompt">
+            <Input.TextArea
+              rows={4}
+              value={selectedNodeData.systemPrompt}
+              onChange={(event) =>
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  systemPrompt: event.target.value,
+                })
+              }
+            />
+          </Form.Item>
+          <Form.Item label="User Prompt 模板">
+            <Input.TextArea
+              rows={6}
+              value={selectedNodeData.userPromptTemplate}
+              onChange={(event) =>
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  userPromptTemplate: event.target.value,
+                })
+              }
+            />
+          </Form.Item>
+          <Form.Item label="输出模式">
+            <Select
+              value={selectedNodeData.outputMode}
+              options={[
+                { label: "text", value: "text" },
+                { label: "json", value: "json" },
+              ]}
+              onChange={(outputMode) => {
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  outputMode,
+                });
+              }}
+            />
+          </Form.Item>
+        </>
+      );
+    }
+    if (selectedNodeData.nodeType === "queryRewrite") {
+      return (
+        <Form.Item label="原始问题模板">
+          <Input.TextArea
+            rows={4}
+            value={selectedNodeData.query}
+            onChange={(event) =>
+              updateNodeData(selectedNodeId, {
+                ...selectedNodeData,
+                query: event.target.value,
+              })
+            }
+          />
+        </Form.Item>
+      );
+    }
+    if (
+      selectedNodeData.nodeType === "vectorRetrieve" ||
+      selectedNodeData.nodeType === "bm25Retrieve" ||
+      selectedNodeData.nodeType === "rerank"
+    ) {
+      return (
+        <>
+          <Form.Item label="检索查询">
+            <Input.TextArea
+              rows={4}
+              value={selectedNodeData.query}
+              onChange={(event) =>
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  query: event.target.value,
+                })
+              }
+            />
+          </Form.Item>
+          <Form.Item label="Top K">
+            <InputNumber
+              min={1}
+              max={20}
+              value={selectedNodeData.topK}
+              onChange={(value) =>
+                updateNodeData(selectedNodeId, {
+                  ...selectedNodeData,
+                  topK: Number(value ?? 5),
+                })
+              }
+            />
+          </Form.Item>
+        </>
+      );
+    }
+    if (selectedNodeData.nodeType === "mergeResults") {
+      return (
+        <Form.Item label="结果上限">
+          <InputNumber
+            min={1}
+            max={50}
+            value={selectedNodeData.resultLimit}
+            onChange={(value) =>
+              updateNodeData(selectedNodeId, {
+                ...selectedNodeData,
+                resultLimit: Number(value ?? 8),
+              })
+            }
+          />
+        </Form.Item>
+      );
+    }
+    if (selectedNodeData.nodeType === "answer") {
+      return (
+        <Form.Item label="回答问题模板">
+          <Input.TextArea
+            rows={5}
+            value={selectedNodeData.question}
+            onChange={(event) =>
+              updateNodeData(selectedNodeId, {
+                ...selectedNodeData,
+                question: event.target.value,
+              })
+            }
+          />
+        </Form.Item>
       );
     }
     if (selectedNodeData.nodeType === "condition") {

@@ -3,10 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import type { NavigateFunction } from "react-router-dom";
 import { queryKeys } from "../../constants/queryKeys";
-import { askRagStream } from "../../services/rag";
+import { askRagStream, RagStreamHttpError } from "../../services/rag";
 import type { ApiErrorPayload } from "../../types/api";
 import type { ChatMessage, ConversationItem } from "../../types/chat";
 import type { RagAskMode } from "../../types/rag";
+
+const AUTO_RETRY_DELAY_MS = 500;
+const AUTO_RETRY_LIMIT = 1;
 
 interface CreateConversationAction {
   isPending: boolean;
@@ -27,8 +30,19 @@ interface UseChatStreamingResult {
   streamingAssistantMessage: ChatMessage | null;
   streamingUserMessage: ChatMessage | null;
   submitErrorMessage: string;
+  canRetryLastFailed: boolean;
   handleAbortStreaming: () => void;
+  handleRetryLastFailed: () => Promise<void>;
   handleSubmit: (query: string, mode: RagAskMode) => Promise<void>;
+}
+
+interface StreamRequestContext {
+  conversationId: string;
+  query: string;
+  mode: RagAskMode;
+  requestId: string;
+  navigateAfterSuccess: boolean;
+  autoRetryCount: number;
 }
 
 function getApiErrorMessage(error: AxiosError<ApiErrorPayload> | null): string {
@@ -46,6 +60,46 @@ function getGenericErrorMessage(error: Error): string {
     return "请求失败，请稍后重试。";
   }
   return message;
+}
+
+function canRetryStreamError(error: Error): boolean {
+  if (error instanceof RagStreamHttpError) {
+    return error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+
+  return true;
+}
+
+function shouldKeepManualRetry(error: Error): boolean {
+  if (error instanceof RagStreamHttpError) {
+    return (
+      error.status === 408 ||
+      error.status === 409 ||
+      error.status === 429 ||
+      error.status >= 500
+    );
+  }
+
+  return true;
+}
+
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    const timeoutId = window.setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timeoutId);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 function createRequestId(): string {
@@ -85,7 +139,9 @@ export function useChatStreaming(
   const [streamingUserMessage, setStreamingUserMessage] =
     useState<ChatMessage | null>(null);
   const [submitErrorMessage, setSubmitErrorMessage] = useState("");
+  const [canRetryLastFailed, setCanRetryLastFailed] = useState(false);
   const streamingAbortControllerRef = useRef<AbortController | null>(null);
+  const lastFailedRequestRef = useRef<StreamRequestContext | null>(null);
   const {
     isPending: isCreatingConversation,
     mutateAsync: createConversationAsync,
@@ -98,6 +154,8 @@ export function useChatStreaming(
     setStreamingAssistantMessage(null);
     setStreamingUserMessage(null);
     setSubmitErrorMessage("");
+    setCanRetryLastFailed(false);
+    lastFailedRequestRef.current = null;
   }, [activeConversationId]);
 
   useEffect(
@@ -122,73 +180,47 @@ export function useChatStreaming(
     [currentKnowledgeBaseId, queryClient],
   );
 
-  const handleSubmit = useCallback(
-    async (nextQuery: string, mode: RagAskMode): Promise<void> => {
-      const query = nextQuery.trim();
-      if (!query || isStreamingAnswer || isCreatingConversation) {
-        return;
-      }
-
-      if (currentKnowledgeBaseId.length === 0) {
-        setSubmitErrorMessage("请先选择知识库。");
-        return;
-      }
-
-      if (activeConversationId && !activeConversation) {
-        setSubmitErrorMessage(
-          "当前会话不属于已选知识库，已为你切换回当前知识库。",
-        );
-        navigate("/app/chat", { replace: true });
-        return;
-      }
-
-      setSubmitErrorMessage("");
-      let targetConversationId = activeConversationId;
+  const runStreamingRequest = useCallback(
+    async (request: StreamRequestContext): Promise<void> => {
+      const tempAssistantMessageId = `stream-${Date.now()}`;
+      const streamController = new AbortController();
       let hasStartedStreaming = false;
-      let shouldNavigateToCreatedConversation = false;
+
+      streamingAbortControllerRef.current?.abort();
+      streamingAbortControllerRef.current = streamController;
+      setSubmitErrorMessage("");
+      setCanRetryLastFailed(false);
+      setIsStreamingAnswer(true);
+      setStreamingAssistantMessage({
+        id: tempAssistantMessageId,
+        role: "assistant",
+        content: "正在生成...",
+        createdAt: new Date().toLocaleString("zh-CN", {
+          hour12: false,
+        }),
+        citations: [],
+        trace: undefined,
+        requestId: request.requestId,
+        status: "streaming",
+      });
+      setStreamingUserMessage({
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: request.query,
+        createdAt: new Date().toLocaleString("zh-CN", {
+          hour12: false,
+        }),
+        requestId: request.requestId,
+      });
+      hasStartedStreaming = true;
 
       try {
-        if (!targetConversationId) {
-          const createdConversation = await createConversationAsync({});
-          targetConversationId = createdConversation.id;
-          shouldNavigateToCreatedConversation = true;
-        }
-
-        const tempAssistantMessageId = `stream-${Date.now()}`;
-        const requestId = createRequestId();
-        const streamController = new AbortController();
-        streamingAbortControllerRef.current?.abort();
-        streamingAbortControllerRef.current = streamController;
-        setIsStreamingAnswer(true);
-        setStreamingAssistantMessage({
-          id: tempAssistantMessageId,
-          role: "assistant",
-          content: "正在生成...",
-          createdAt: new Date().toLocaleString("zh-CN", {
-            hour12: false,
-          }),
-          citations: [],
-          trace: undefined,
-          requestId,
-          status: "streaming",
-        });
-        setStreamingUserMessage({
-          id: `user-${Date.now()}`,
-          role: "user",
-          content: query,
-          createdAt: new Date().toLocaleString("zh-CN", {
-            hour12: false,
-          }),
-          requestId,
-        });
-        hasStartedStreaming = true;
-
         const result = await askRagStream(
           {
-            conversationId: targetConversationId,
-            query,
-            mode,
-            requestId,
+            conversationId: request.conversationId,
+            query: request.query,
+            mode: request.mode,
+            requestId: request.requestId,
           },
           {
             signal: streamController.signal,
@@ -213,8 +245,10 @@ export function useChatStreaming(
         await invalidateConversationData(result.conversationId);
         setStreamingAssistantMessage(null);
         setStreamingUserMessage(null);
+        lastFailedRequestRef.current = null;
+        setCanRetryLastFailed(false);
         hasStartedStreaming = false;
-        if (shouldNavigateToCreatedConversation) {
+        if (request.navigateAfterSuccess) {
           navigate(`/app/chat/${result.conversationId}`);
         }
       } catch (error) {
@@ -233,7 +267,122 @@ export function useChatStreaming(
               status: "interrupted",
             };
           });
-        } else if (error instanceof AxiosError) {
+        } else if (error instanceof Error) {
+          if (
+            canRetryStreamError(error) &&
+            request.autoRetryCount < AUTO_RETRY_LIMIT
+          ) {
+            try {
+              await delay(AUTO_RETRY_DELAY_MS, streamController.signal);
+            } catch (retryDelayError) {
+              if (
+                retryDelayError instanceof DOMException &&
+                retryDelayError.name === "AbortError"
+              ) {
+                setStreamingAssistantMessage((previous) => {
+                  if (!previous) {
+                    return previous;
+                  }
+
+                  return {
+                    ...previous,
+                    content:
+                      previous.content === "正在生成..."
+                        ? "已停止生成。"
+                        : previous.content,
+                    status: "interrupted",
+                  };
+                });
+                return;
+              }
+
+              throw retryDelayError;
+            }
+
+            hasStartedStreaming = false;
+            await runStreamingRequest({
+              ...request,
+              autoRetryCount: request.autoRetryCount + 1,
+            });
+            return;
+          }
+
+          setSubmitErrorMessage(getGenericErrorMessage(error));
+          setStreamingAssistantMessage(null);
+          setStreamingUserMessage(null);
+          if (shouldKeepManualRetry(error)) {
+            lastFailedRequestRef.current = {
+              ...request,
+              autoRetryCount: 0,
+            };
+            setCanRetryLastFailed(true);
+          } else {
+            lastFailedRequestRef.current = null;
+            setCanRetryLastFailed(false);
+          }
+        } else {
+          setSubmitErrorMessage("请求失败，请稍后重试。");
+          setStreamingAssistantMessage(null);
+          setStreamingUserMessage(null);
+          lastFailedRequestRef.current = {
+            ...request,
+            autoRetryCount: 0,
+          };
+          setCanRetryLastFailed(true);
+        }
+      } finally {
+        if (hasStartedStreaming) {
+          await invalidateConversationData(request.conversationId);
+        }
+        setIsStreamingAnswer(false);
+        streamingAbortControllerRef.current = null;
+      }
+    },
+    [invalidateConversationData, navigate],
+  );
+
+  const handleSubmit = useCallback(
+    async (nextQuery: string, mode: RagAskMode): Promise<void> => {
+      const query = nextQuery.trim();
+      if (!query || isStreamingAnswer || isCreatingConversation) {
+        return;
+      }
+
+      if (currentKnowledgeBaseId.length === 0) {
+        setSubmitErrorMessage("请先选择知识库。");
+        return;
+      }
+
+      if (activeConversationId && !activeConversation) {
+        setSubmitErrorMessage(
+          "当前会话不属于已选知识库，已为你切换回当前知识库。",
+        );
+        navigate("/app/chat", { replace: true });
+        return;
+      }
+
+      setSubmitErrorMessage("");
+      let targetConversationId = activeConversationId;
+      let shouldNavigateToCreatedConversation = false;
+
+      try {
+        if (!targetConversationId) {
+          const createdConversation = await createConversationAsync({});
+          targetConversationId = createdConversation.id;
+          shouldNavigateToCreatedConversation = true;
+        }
+
+        const requestId = createRequestId();
+        await runStreamingRequest({
+          conversationId: targetConversationId,
+          query,
+          mode,
+          requestId,
+          navigateAfterSuccess: shouldNavigateToCreatedConversation,
+          autoRetryCount: 0,
+        });
+      } catch (error) {
+        if (error instanceof AxiosError) {
           setSubmitErrorMessage(getApiErrorMessage(error));
           setStreamingAssistantMessage(null);
           setStreamingUserMessage(null);
@@ -246,12 +395,6 @@ export function useChatStreaming(
           setStreamingAssistantMessage(null);
           setStreamingUserMessage(null);
         }
-      } finally {
-        if (hasStartedStreaming && targetConversationId) {
-          await invalidateConversationData(targetConversationId);
-        }
-        setIsStreamingAnswer(false);
-        streamingAbortControllerRef.current = null;
       }
     },
     [
@@ -259,12 +402,24 @@ export function useChatStreaming(
       activeConversationId,
       createConversationAsync,
       currentKnowledgeBaseId,
-      invalidateConversationData,
       isCreatingConversation,
       isStreamingAnswer,
       navigate,
+      runStreamingRequest,
     ],
   );
+
+  const handleRetryLastFailed = useCallback(async (): Promise<void> => {
+    const failedRequest = lastFailedRequestRef.current;
+    if (!failedRequest || isStreamingAnswer || isCreatingConversation) {
+      return;
+    }
+
+    await runStreamingRequest({
+      ...failedRequest,
+      autoRetryCount: 0,
+    });
+  }, [isCreatingConversation, isStreamingAnswer, runStreamingRequest]);
 
   const handleAbortStreaming = useCallback(() => {
     const activeController = streamingAbortControllerRef.current;
@@ -281,7 +436,9 @@ export function useChatStreaming(
     streamingAssistantMessage,
     streamingUserMessage,
     submitErrorMessage,
+    canRetryLastFailed,
     handleAbortStreaming,
+    handleRetryLastFailed,
     handleSubmit,
   };
 }

@@ -19,6 +19,17 @@ interface StreamTokenPayload {
 
 interface StreamErrorPayload {
   message?: string | string[];
+  status?: number;
+}
+
+export class RagStreamHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "RagStreamHttpError";
+    this.status = status;
+  }
 }
 
 function buildStreamUrl(): string {
@@ -71,6 +82,18 @@ function parseEventBlock(
   };
 }
 
+function throwStreamEventError(payload: StreamErrorPayload): never {
+  const resolvedMessage = Array.isArray(payload.message)
+    ? payload.message.join("；")
+    : payload.message ?? "流式响应失败";
+
+  if (typeof payload.status === "number") {
+    throw new RagStreamHttpError(resolvedMessage, payload.status);
+  }
+
+  throw new Error(resolvedMessage);
+}
+
 export async function askRagStream(
   payload: RagAskRequest,
   callbacks: RagAskStreamCallbacks,
@@ -100,7 +123,7 @@ export async function askRagStream(
     } catch {
       // ignore parse error and keep fallback message
     }
-    throw new Error(errorMessage);
+    throw new RagStreamHttpError(errorMessage, response.status);
   }
 
   if (!response.body) {
@@ -135,10 +158,7 @@ export async function askRagStream(
           finalResponse = JSON.parse(parsedEvent.data) as RagAskResponse;
         } else if (parsedEvent.event === "error") {
           const errorPayload = JSON.parse(parsedEvent.data) as StreamErrorPayload;
-          const resolvedMessage = Array.isArray(errorPayload.message)
-            ? errorPayload.message.join("；")
-            : errorPayload.message ?? "流式响应失败";
-          throw new Error(resolvedMessage);
+          throwStreamEventError(errorPayload);
         }
       }
 
@@ -154,10 +174,7 @@ export async function askRagStream(
     }
     if (trailingEvent?.event === "error") {
       const trailingErrorPayload = JSON.parse(trailingEvent.data) as StreamErrorPayload;
-      const trailingMessage = Array.isArray(trailingErrorPayload.message)
-        ? trailingErrorPayload.message.join("；")
-        : trailingErrorPayload.message ?? "流式响应失败";
-      throw new Error(trailingMessage);
+      throwStreamEventError(trailingErrorPayload);
     }
   }
 

@@ -32,6 +32,11 @@ import { ChunkToCitationMapper } from './mappers/chunk-to-citation.mapper';
 import { MessageHistoryMapper } from './mappers/message-history.mapper';
 import { getRagRetrievalConfig } from './retrievers/config/rag-retrieval.config';
 import { RagRetrievalService } from './retrievers/rag-retrieval.service';
+import {
+  buildRecentHistoryRequestIdFilter,
+  resolveIdempotentAssistantMessageAction,
+  STALE_STREAMING_REQUEST_MS,
+} from './utils/rag-idempotency.util';
 
 const HISTORY_LIMIT = 8;
 const STREAMING_MESSAGE_PLACEHOLDER = '正在生成...';
@@ -39,7 +44,6 @@ const INTERRUPTED_MESSAGE_FALLBACK = '已停止生成。';
 const FAILED_MESSAGE_FALLBACK = '生成失败，请稍后重试。';
 const STREAM_FLUSH_INTERVAL_MS = 1000;
 const STREAM_FLUSH_CHAR_THRESHOLD = 200;
-const STALE_STREAMING_REQUEST_MS = 2 * 60 * 1000;
 
 interface HistoryMessageItem {
   role: MessageRoleEnum;
@@ -441,6 +445,7 @@ export class RagService {
         userId,
         dto.conversationId,
         HISTORY_LIMIT,
+        dto.requestId,
       );
       // message入库
       const userMessage = await this.createUserMessageForRequest({
@@ -470,15 +475,13 @@ export class RagService {
         mode === 'rag'
           ? this.prepareFallbackAnswer(retrievedChunks)
           : this.prepareChatFallbackAnswer(query);
-      const createdAssistantMessage = await this.createMessageAndTouch({
+      const createdAssistantMessage = await this.createAssistantMessageForRequest({
         userId,
         conversationId: dto.conversationId,
-        role: MessageRoleEnum.Assistant,
         content: STREAMING_MESSAGE_PLACEHOLDER,
         citations,
         trace: undefined,
         requestId: dto.requestId,
-        status: 'streaming',
       });
       assistantMessage = createdAssistantMessage;
 
@@ -876,34 +879,19 @@ export class RagService {
       throw new ConflictException('requestId state is incomplete');
     }
 
-    if (assistantMessage.status === 'streaming') {
-      const isStale =
-        Date.now() - assistantMessage.updatedAt.getTime() >=
-        STALE_STREAMING_REQUEST_MS;
-      if (!isStale) {
-        throw new ConflictException('当前请求正在生成中，请稍后重试');
-      }
+    const action = resolveIdempotentAssistantMessageAction({
+      status: assistantMessage.status,
+      updatedAt: assistantMessage.updatedAt,
+      now: new Date(),
+      staleAfterMs: STALE_STREAMING_REQUEST_MS,
+    });
 
-      const interruptedMessage = await this.updateAssistantMessage({
-        userId: input.userId,
-        conversationId: input.conversationId,
-        messageId: assistantMessage.id,
-        content: this.normalizeGeneratedAnswer(
-          assistantMessage.content === STREAMING_MESSAGE_PLACEHOLDER
-            ? ''
-            : assistantMessage.content,
-          'interrupted',
-        ),
-        citations: assistantMessage.citations,
-        trace: assistantMessage.trace,
-        status: 'interrupted',
-      });
+    if (action === 'retry-generation') {
+      return null;
+    }
 
-      return this.toRagAnswerFromMessages({
-        userMessage,
-        assistantMessage: interruptedMessage,
-        requestId: input.requestId,
-      });
+    if (action === 'reject-active-stream') {
+      throw new ConflictException('当前请求正在生成中，请稍后重试');
     }
 
     return this.toRagAnswerFromMessages({
@@ -944,6 +932,66 @@ export class RagService {
       trace: undefined,
       requestId: input.requestId,
       status: 'completed',
+    });
+  }
+
+  private async createAssistantMessageForRequest(input: {
+    userId: string;
+    conversationId: string;
+    content: string;
+    citations: RagCitation[];
+    trace?: MessageTrace;
+    requestId?: string;
+  }): Promise<MessageDocument> {
+    if (input.requestId) {
+      const existingMessage = await this.findMessageByRequestId({
+        userId: input.userId,
+        requestId: input.requestId,
+        role: MessageRoleEnum.Assistant,
+      });
+      if (existingMessage) {
+        if (existingMessage.conversationId.toString() !== input.conversationId) {
+          throw new BadRequestException(
+            'requestId has been used by another conversation',
+          );
+        }
+
+        const action = resolveIdempotentAssistantMessageAction({
+          status: existingMessage.status,
+          updatedAt: existingMessage.updatedAt,
+          now: new Date(),
+          staleAfterMs: STALE_STREAMING_REQUEST_MS,
+        });
+
+        if (action === 'return-existing') {
+          throw new ConflictException('requestId has already completed');
+        }
+
+        if (action === 'reject-active-stream') {
+          throw new ConflictException('当前请求正在生成中，请稍后重试');
+        }
+
+        return this.updateAssistantMessage({
+          userId: input.userId,
+          conversationId: input.conversationId,
+          messageId: existingMessage.id,
+          content: input.content,
+          citations: input.citations,
+          trace: input.trace,
+          status: 'streaming',
+        });
+      }
+    }
+
+    return this.createMessageAndTouch({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      role: MessageRoleEnum.Assistant,
+      content: input.content,
+      citations: input.citations,
+      trace: input.trace,
+      requestId: input.requestId,
+      status: 'streaming',
     });
   }
 
@@ -1043,11 +1091,13 @@ export class RagService {
     userId: string,
     conversationId: string,
     limit: number,
+    excludeRequestId?: string,
   ): Promise<HistoryMessageItem[]> {
     const messages = await this.messageModel
       .find({
         userId: this.toObjectId(userId),
         conversationId: this.toObjectId(conversationId),
+        ...buildRecentHistoryRequestIdFilter(excludeRequestId),
       })
       .sort({ createdAt: -1 })
       .limit(limit)

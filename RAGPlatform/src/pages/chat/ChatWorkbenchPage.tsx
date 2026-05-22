@@ -7,7 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Alert, Col, Row, Typography } from "antd";
+import { Alert, Button, Col, Row, Typography } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { ChatInputBox } from "../../components/chat/ChatInputBox";
 import { ChatMessageList } from "../../components/chat/ChatMessageList";
@@ -174,7 +175,9 @@ export function ChatWorkbenchPage() {
     streamingAssistantMessage,
     streamingUserMessage,
     submitErrorMessage,
+    canRetryLastFailed,
     handleAbortStreaming,
+    handleRetryLastFailed,
     handleSubmit,
   } = useChatStreaming({
     activeConversation,
@@ -281,6 +284,18 @@ export function ChatWorkbenchPage() {
                     showIcon
                     title={askErrorMessage}
                     className={styles.submitError}
+                    action={
+                      canRetryLastFailed ? (
+                        <Button
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          disabled={isSubmitting}
+                          onClick={() => void handleRetryLastFailed()}
+                        >
+                          重试
+                        </Button>
+                      ) : undefined
+                    }
                   />
                 ) : null}
                 <ChatInputBox

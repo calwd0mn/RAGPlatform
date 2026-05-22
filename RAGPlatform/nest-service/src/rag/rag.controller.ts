@@ -14,6 +14,7 @@ interface StreamTokenPayload {
 
 interface StreamErrorPayload {
   message: string;
+  status: number;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -77,6 +78,7 @@ export class RagController {
       }
       this.writeEvent<StreamErrorPayload>(response, 'error', {
         message: this.resolveErrorMessage(error),
+        status: this.resolveErrorStatus(error),
       });
     } finally {
       this.ragGenerationLockService.release(generationLockInput);
@@ -126,5 +128,13 @@ export class RagController {
     }
 
     return '请求失败，请稍后重试。';
+  }
+
+  private resolveErrorStatus(error: Error | HttpException): number {
+    if (error instanceof HttpException) {
+      return error.getStatus();
+    }
+
+    return 500;
   }
 }

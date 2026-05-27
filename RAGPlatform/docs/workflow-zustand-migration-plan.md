@@ -565,7 +565,7 @@ npm run build
 后端不涉及本次迁移，但可以保留一次类型检查：
 
 ```bash
-cd nest-service
+cd backend
 npx tsc -p tsconfig.build.json --noEmit
 ```
 

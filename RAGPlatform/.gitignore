@@ -1,28 +1,52 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+build/
+**/build/
+coverage/
+**/coverage/
+stats.html
+**/stats.html
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-.npm-cache
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.production
+
+# Local tool/runtime output
 .codex/
 .cursor/
-stats.html
-test*
-**/test*
+.npm-cache/
+.runtime/
+tmp/
+outputs/
+
+# Runtime uploads
+backend/uploads/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj

@@ -14,6 +14,16 @@
     "lint:backend": "npm run lint --workspace=backend",
     "test:backend": "npm run test --workspace=backend",
     "typecheck:backend": "npm run typecheck --workspace=backend",
+    "cz": "git-cz",
     "check": "npm run build:frontend && npm run typecheck:backend"
+  },
+  "devDependencies": {
+    "commitizen": "^4.3.1",
+    "cz-vinyl": "^2.5.4"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-vinyl"
+    }
   }
 }

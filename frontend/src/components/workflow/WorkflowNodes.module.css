@@ -1,0 +1,61 @@
+.node {
+  width: 210px;
+  min-height: 74px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.nodeHeader {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodeIcon {
+  display: inline-flex;
+  font-size: 16px;
+}
+
+.nodeTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodeStatus {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.nodeMeta {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.successIcon {
+  color: #16a34a;
+}
+
+.failedIcon {
+  color: #dc2626;
+}
+
+.skippedIcon {
+  color: #94a3b8;
+}
+
+.trueHandle {
+  top: 32% !important;
+  background: #16a34a !important;
+}
+
+.falseHandle {
+  top: 68% !important;
+  background: #dc2626 !important;
+}

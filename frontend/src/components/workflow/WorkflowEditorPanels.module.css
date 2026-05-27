@@ -1,0 +1,214 @@
+.sideCard {
+  min-width: 0;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.canvasCard {
+  min-width: 0;
+  min-height: 0;
+  display: flex !important;
+}
+
+.canvasCard :global(.ant-card-body) {
+  flex: 1;
+  min-height: 0;
+  padding: 0 !important;
+}
+
+.canvasCard [class*='stack'] {
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  overflow: hidden;
+  background: #f8fafc;
+  border-radius: 0 0 8px 8px;
+}
+
+.canvas :global(.react-flow__node) {
+  width: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.canvas :global(.react-flow__node.selected),
+.canvas :global(.react-flow__node:focus),
+.canvas :global(.react-flow__node:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.nodeList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nodePaletteItem {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: grab;
+}
+
+.nodePaletteItem:hover {
+  border-color: #1677ff;
+}
+
+.nodePaletteIcon {
+  display: inline-flex;
+  color: #1677ff;
+}
+
+.fullWidth {
+  width: 100%;
+  min-width: 0;
+}
+
+.configForm {
+  width: 100%;
+  min-width: 0;
+}
+
+.configForm :global(.ant-form-item) {
+  margin-bottom: 12px;
+}
+
+.configForm :global(.ant-form-item-label) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.configForm :global(.ant-form-item-label > label) {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.configForm :global(.ant-input),
+.configForm :global(.ant-input-number),
+.configForm :global(.ant-input-affix-wrapper),
+.configForm :global(.ant-input-textarea) {
+  max-width: 100%;
+}
+
+.configForm :global(textarea.ant-input) {
+  resize: vertical;
+}
+
+.runSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.runOverview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.finalOutput {
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+}
+
+.finalOutputText {
+  max-height: 140px;
+  margin: 8px 0 0 !important;
+  overflow: auto;
+  color: #1f2937;
+  white-space: pre-wrap;
+}
+
+.executionList {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.executionCollapse {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.executionCollapse :global(.ant-collapse-item) {
+  border-bottom-color: #eef2f7 !important;
+}
+
+.executionCollapse :global(.ant-collapse-header) {
+  align-items: center !important;
+  padding: 9px 10px !important;
+}
+
+.executionCollapse :global(.ant-collapse-content-box) {
+  padding: 0 10px 10px !important;
+}
+
+.executionLabel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.executionName {
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2937;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executionSummary {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executionDetail {
+  min-width: 0;
+}
+
+.outputBlock {
+  max-height: 180px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .canvas {
+    min-height: 520px;
+  }
+}

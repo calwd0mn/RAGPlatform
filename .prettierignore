@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+frontend/dist/
+backend/dist/
+backend/uploads/
+.codex/
+.cursor/
+.runtime/
+tmp/
+outputs/
